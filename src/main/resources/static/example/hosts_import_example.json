@@ -1,0 +1,27 @@
+{
+  "entries": [
+    {
+      "ipAddress": "127.0.0.1",
+      "domains": "localhost local.test",
+      "comment": "本地开发环境",
+      "sortOrder": 10
+    },
+    {
+      "ipAddress": "192.168.1.100",
+      "domains": "dev.example.com staging.example.com",
+      "comment": "测试服务器",
+      "sortOrder": 20
+    },
+    {
+      "ipAddress": "::1",
+      "domains": "ipv6-localhost",
+      "comment": "IPv6本地回环",
+      "sortOrder": 30
+    },
+    {
+      "ipAddress": "10.0.0.50",
+      "domains": "api.internal db.internal cache.internal",
+      "comment": "内部服务集群"
+    }
+  ]
+}

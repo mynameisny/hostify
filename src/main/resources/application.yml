@@ -1,0 +1,11 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: hostify
+  profiles:
+    active: ${DATABASE_PROFILE:mysql}
+  config:
+    import: application-security.yml
+

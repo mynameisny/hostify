@@ -1,0 +1,2272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hostify 管理面板</title>
+    <link rel="icon" href="/favicon.png">
+    <link href="/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/css/bootstrap-icons.css" rel="stylesheet">
+
+    <style>
+        body {
+            overflow-x: hidden;
+            width: 100vw;
+        }
+        .container-fluid {
+            max-width: 100vw;
+            padding-right: 0 !important;
+            padding-left: 0 !important;
+            box-sizing: border-box;
+        }
+        .sidebar {
+            height: 100vh;
+            position: fixed;
+            overflow-y: auto;
+            width: 250px;
+            box-sizing: border-box;
+            padding-right: 15px; /* 预留滚动条空间 */
+        }
+        
+        /* 隐藏滚动条但保持功能 */
+        .sidebar::-webkit-scrollbar {
+            width: 0;
+        }
+        .sidebar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        .sidebar .btn-outline-secondary.active {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+            color: white;
+        }
+        
+        .sidebar .btn-outline-secondary:hover:not(.active) {
+            background-color: #e9ecef;
+            border-color: #dee2e6;
+            color: #495057;
+        }
+        .main-content {
+            margin-left: 250px;
+            width: calc(100% - 250px);
+            overflow-x: hidden;
+            box-sizing: border-box;
+            min-height: 100vh;
+        }
+        .row {
+            margin-right: 0 !important;
+            margin-left: 0 !important;
+            box-sizing: border-box;
+        }
+        .config-item {
+            cursor: pointer;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            box-sizing: border-box;
+            color: #000 !important;
+        }
+        .config-item:hover {
+            background-color: #f8f9fa;
+        }
+        .config-item.active {
+            background-color: #0d6efd !important;
+            color: white !important;
+            box-shadow: 0 2px 8px rgba(13, 110, 253, 0.3);
+            transform: translateX(2px);
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        
+        .config-item.active::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(to bottom, transparent, #0d6efd, transparent);
+        }
+        
+        .config-item.active::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(to bottom, transparent, #0d6efd, transparent);
+        }
+        
+        .config-item:not(.active):hover {
+            transform: translateX(2px);
+            transition: all 0.2s ease;
+            background-color: rgba(0, 0, 0, 0.05) !important;
+        }
+        
+        .bi-check-circle-fill {
+            font-size: 1.2rem;
+            transition: all 0.2s ease;
+        }
+        
+        .config-item.active .bi-check-circle-fill {
+            color: #fff !important;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .entry-row {
+            border-bottom: 1px solid #dee2e6;
+            padding: 10px 0;
+        }
+        .domain-badge {
+            background-color: #6c757d;
+            color: white;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        .status-enabled {
+            color: #198754;
+        }
+        .status-disabled {
+            color: #dc3545;
+        }
+        .action-buttons {
+            display: none;
+        }
+        .entry-row:hover .action-buttons {
+            display: inline-block;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="sidebar bg-light p-3">
+                <h4 class="mb-4 d-flex align-items-center gap-2">
+                    <img src="/favicon.png" alt="Hostify" width="24" height="24" style="border-radius:6px;">
+                    Hostify 管理
+                </h4>
+                
+                <button class="btn btn-primary w-100 mb-2" onclick="showCreateConfigModal()">
+                    <i class="bi bi-plus"></i> 新建配置
+                </button>
+                
+                <div class="mb-3">
+                    <input type="text" id="searchConfig" class="form-control form-control-sm" placeholder="搜索配置..." oninput="filterConfigs()">
+                </div>
+                
+                <div id="configList" class="list-group">
+                    <!-- 配置列表将在这里动态生成 -->
+                </div>
+                
+                <hr class="my-3">
+                <button class="btn btn-outline-secondary w-100" id="apiKeyManagementBtn" onclick="showApiKeyPanel()">
+                    <i class="bi bi-key"></i> API Key 管理
+                </button>
+                <a href="help.html" class="btn btn-outline-info w-100 mt-2" target="_blank">
+                    <i class="bi bi-question-circle"></i> 帮助文档
+                </a>
+                <button class="btn btn-outline-danger w-100 mt-2" onclick="logout()">
+                    <i class="bi bi-box-arrow-right"></i> 退出
+                </button>
+            </div>
+
+            <!-- Main Content -->
+            <div class="main-content px-4 py-4">
+                <div id="emptyState" class="text-center py-5">
+                    <i class="bi bi-server h1 text-secondary mb-3"></i>
+                    <h5>选择或创建一个配置</h5>
+                    <p class="text-muted">从左侧选择一个配置，或点击"新建配置"按钮创建新的hosts配置</p>
+                </div>
+
+                <div id="configDetail" class="d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h3 id="configTitle">配置详情</h3>
+                        <div>
+                            <button class="btn btn-outline-secondary me-2" onclick="toggleConfigEnabled()">
+                                <span id="configToggleText">启用</span>
+                            </button>
+                            <button class="btn btn-outline-danger" onclick="deleteConfig()">
+                                <i class="bi bi-trash"></i> 删除
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4 rounded-3 shadow-sm border-primary">
+                        <div class="card-header py-3 text-bg-primary border-primary">
+                            <h6 class="mb-0">基本信息</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p><strong>名称:</strong> <span id="configName"></span></p>
+                                    <p><strong>标识符:</strong> <span id="configKey"></span></p>
+                                    <p><strong>状态:</strong> <span id="configStatus"></span></p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p><strong>创建时间:</strong> <span id="configCreatedAt"></span></p>
+                                    <p><strong>更新时间:</strong> <span id="configUpdatedAt"></span></p>
+                                    <p><strong>描述:</strong> <span id="configDescription" class="text-muted"></span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5>Hosts 条目 (<span id="entryCount">0</span>)</h5>
+                        <div>
+                            <button class="btn btn-success" onclick="showCreateEntryModal()">
+                                <i class="bi bi-plus"></i> 添加条目
+                            </button>
+                            <button class="btn btn-outline-secondary ms-2" onclick="showTextEditorModal()">
+                                <i class="bi bi-pencil-square"></i> 文本编辑
+                            </button>
+                            <button class="btn btn-outline-info ms-2" onclick="showImportModal()">
+                                <i class="bi bi-upload"></i> 批量导入
+                            </button>
+                            <button class="btn btn-outline-secondary ms-2" onclick="reorderEntries()">
+                                <i class="bi bi-sort-numeric-down"></i> 整理排序
+                            </button>
+                            <button class="btn btn-outline-primary ms-2" onclick="showHostsPreviewModal()">
+                                <i class="bi bi-eye"></i> 预览 Hosts
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="entriesContainer" class="mb-4">
+                        <!-- 条目列表将在这里动态生成 -->
+                    </div>
+                    
+                    <!-- 回到顶部按钮 -->
+                    <button class="btn btn-outline-secondary" onclick="scrollToTop()" style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;">
+                        <i class="bi bi-arrow-up"></i> 回到顶部
+                    </button>
+
+                </div>
+                
+                <!-- API Key 管理面板 -->
+                <div id="apiKeyPanel" class="d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h3>API Key 管理</h3>
+                        <button class="btn btn-outline-secondary" onclick="hideApiKeyPanel()">
+                            返回配置
+                        </button>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-body">
+                            <p class="text-muted">用于 SwitchHosts 集成的 API Key</p>
+                            <div class="mb-3">
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="switchHostsConfigSelect" class="form-label">选择配置:</label>
+                                        <select class="form-select" id="switchHostsConfigSelect" onchange="updateSwitchHostsButtons()">
+                                            <option value="">请选择一个配置</option>
+                                        </select>
+                                        <div class="form-text">选择要关联的配置以生成 SwitchHosts URL</div>
+                                    </div>
+                                </div>
+                                <button class="btn btn-primary" onclick="generateApiKey()">
+                                    <i class="bi bi-plus"></i> 生成新 Key
+                                </button>
+                            </div>
+                            <div id="apiKeysList">
+                                <!-- API Keys will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建配置模态框 -->
+    <div class="modal fade" id="createConfigModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新建配置</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="createConfigForm">
+                        <div class="mb-3">
+                            <label class="form-label">配置名称 *</label>
+                            <input type="text" class="form-control" id="newConfigName" required maxlength="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">配置标识符 *</label>
+                            <input type="text" class="form-control" id="newConfigKey" required maxlength="50" 
+                                   pattern="[a-zA-Z0-9_-]+" title="只能包含字母、数字、下划线和连字符">
+                            <div class="form-text">用于URL路径，例如: /api/hosts/raw/{标识符}</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">配置描述</label>
+                            <textarea class="form-control" id="newConfigDescription" rows="3" maxlength="500"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">配置颜色</label>
+                            <input type="color" class="form-control form-control-color" id="newConfigColor" value="#0d6efd" title="选择配置颜色">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="createConfig()">创建</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑配置模态框 -->
+    <div class="modal fade" id="editConfigModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑配置</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editConfigForm">
+                        <input type="hidden" id="editConfigId">
+                        <div class="mb-3">
+                            <label class="form-label">配置名称 *</label>
+                            <input type="text" class="form-control" id="editConfigName" required maxlength="100">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">配置标识符 *</label>
+                            <input type="text" class="form-control" id="editConfigKey" required maxlength="50" 
+                                   pattern="[a-zA-Z0-9_-]+" title="只能包含字母、数字、下划线和连字符">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">配置描述</label>
+                            <textarea class="form-control" id="editConfigDescription" rows="3" maxlength="500"></textarea>
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="editConfigEnabled">
+                            <label class="form-check-label">启用配置</label>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">配置颜色</label>
+                            <input type="color" class="form-control form-control-color" id="editConfigColor" title="选择配置颜色">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="updateConfig()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hosts 预览模态框 -->
+    <div class="modal fade" id="hostsPreviewModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Hosts 预览 - <span id="previewConfigName"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <small class="text-muted" id="previewConfigKey"></small>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="copyHostsContent()">
+                            <i class="bi bi-clipboard"></i> 复制内容
+                        </button>
+                    </div>
+                    <pre id="hostsPreviewModalContent" class="bg-light p-3 rounded" style="white-space: pre-wrap; max-height: 60vh; overflow-y: auto; font-family: monospace; font-size: 0.875em;"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建条目模态框 -->
+    <div class="modal fade" id="createEntryModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加 Hosts 条目</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="createEntryForm">
+                        <div class="mb-3">
+                            <label class="form-label">IP 地址 *</label>
+                            <input type="text" class="form-control" id="newEntryIp" required maxlength="45" 
+                                   placeholder="例如: 192.168.1.1 或 2001:db8::1">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">域名列表 *</label>
+                            <textarea class="form-control" id="newEntryDomains" rows="3" required maxlength="2000" 
+                                      placeholder="多个域名用空格分隔，例如: example.com www.example.com"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">注释</label>
+                            <input type="text" class="form-control" id="newEntryComment" maxlength="500">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">排序顺序</label>
+                            <input type="number" class="form-control" id="newEntrySortOrder" min="0" max="999999">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="createEntry()">添加</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑条目模态框 -->
+    <div class="modal fade" id="editEntryModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑 Hosts 条目</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editEntryForm">
+                        <input type="hidden" id="editEntryId">
+                        <div class="mb-3">
+                            <label class="form-label">IP 地址 *</label>
+                            <input type="text" class="form-control" id="editEntryIp" required maxlength="45">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">域名列表 *</label>
+                            <textarea class="form-control" id="editEntryDomains" rows="3" required maxlength="2000"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">注释</label>
+                            <input type="text" class="form-control" id="editEntryComment" maxlength="500">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">排序顺序</label>
+                            <input type="number" class="form-control" id="editEntrySortOrder" min="0" max="999999">
+                        </div>
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="editEntryEnabled">
+                            <label class="form-check-label">启用条目</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="updateEntry()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 确认删除模态框 -->
+    <div class="modal fade" id="confirmDeleteModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">确认删除</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="deleteMessage"></p>
+                    <p class="text-danger">注意：只能删除已禁用的配置或条目。</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">删除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 批量导入模态框 -->
+    <div class="modal fade" id="importModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">批量导入 Hosts 条目</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-4">
+                        <label class="form-label">选择导入方式:</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="importType" id="importHostsFile" value="hosts" checked>
+                            <label class="form-check-label" for="importHostsFile">
+                                Hosts 文件 (.txt, .hosts)
+                            </label>
+                            <a href="/example/hosts_import_example.txt" download="hosts_import_example.txt" class="ms-2 text-decoration-none">
+                                <small class="text-muted">(下载示例)</small>
+                            </a>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="importType" id="importJsonFile" value="json">
+                            <label class="form-check-label" for="importJsonFile">
+                                JSON 文件
+                            </label>
+                            <a href="/example/hosts_import_example.json" download="hosts_import_example.json" class="ms-2 text-decoration-none">
+                                <small class="text-muted">(下载示例)</small>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="importFile" class="form-label">选择文件:</label>
+                        <input type="file" class="form-control" id="importFile" accept=".txt,.hosts,application/json" required>
+                        <div class="form-text">支持 .txt, .hosts 或 .json 文件格式</div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label">冲突处理方式:</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="conflictAction" id="conflictSkip" value="skip" checked>
+                            <label class="form-check-label" for="conflictSkip">
+                                跳过重复条目（保留现有条目）
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="conflictAction" id="conflictOverwrite" value="overwrite">
+                            <label class="form-check-label" for="conflictOverwrite">
+                                覆盖重复条目（用新条目替换现有条目）
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="conflictAction" id="conflictAbort" value="abort">
+                            <label class="form-check-label" for="conflictAbort">
+                                终止导入（发现重复时停止整个导入过程）
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div id="importPreview" class="mt-3 d-none">
+                        <h6>预览 (<span id="previewCount">0</span> 条目):</h6>
+                        <div id="previewContent" class="bg-light p-2 rounded" style="max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.875em; white-space: pre-wrap;"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-outline-primary" onclick="previewImport()">预览</button>
+                    <button type="button" class="btn btn-primary" onclick="executeImport()">导入</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文本编辑器模态框 -->
+    <div class="modal fade" id="textEditorModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>文本编辑 - <span id="textEditorConfigName"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="px-3 py-2 bg-light border-bottom text-muted" style="font-size: 0.8rem;">
+                        <i class="bi bi-info-circle me-1"></i>
+                        每行一条记录：<code>IP 域名 # 注释</code>（注释可省略）&nbsp;·&nbsp;
+                        以 <code>#&nbsp;IP&nbsp;域名</code> 开头表示禁用条目&nbsp;·&nbsp;
+                        纯注释行（<code>#&nbsp;文字</code>）和空行将被忽略&nbsp;·&nbsp;
+                        保存后将<strong>全量替换</strong>当前所有条目
+                    </div>
+                    <textarea id="textEditorContent"
+                              class="form-control border-0 rounded-0"
+                              style="min-height: 65vh; font-family: 'Fira Mono', 'Consolas', 'Monaco', monospace; font-size: 0.875rem; resize: none; outline: none;"
+                              spellcheck="false"
+                              placeholder="# 示例：&#10;192.168.1.1 example.com www.example.com # 注释&#10;# 10.0.0.1 disabled.example.com   （禁用条目）"></textarea>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <small class="text-muted" id="textEditorLineCount"></small>
+                    <div>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="button" class="btn btn-primary ms-2" onclick="saveTextEditor()">
+                            <i class="bi bi-save"></i> 保存
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // 全局变量
+        let currentConfig = null;
+        let deleteType = null;
+        let deleteId = null;
+
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConfigs();
+            
+            // 设置模态框事件
+            document.getElementById('createConfigModal').addEventListener('hidden.bs.modal', function() {
+                document.getElementById('createConfigForm').reset();
+            });
+            document.getElementById('editConfigModal').addEventListener('hidden.bs.modal', function() {
+                document.getElementById('editConfigForm').reset();
+            });
+            document.getElementById('createEntryModal').addEventListener('hidden.bs.modal', function() {
+                document.getElementById('createEntryForm').reset();
+            });
+            document.getElementById('editEntryModal').addEventListener('hidden.bs.modal', function() {
+                document.getElementById('editEntryForm').reset();
+            });
+            document.getElementById('confirmDeleteModal').addEventListener('hidden.bs.modal', function() {
+                deleteType = null;
+                deleteId = null;
+            });
+        });
+
+        // 简单的fetch封装，添加CSRF token支持
+        async function authenticatedFetch(url, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers
+            };
+            
+            const config = {
+                ...options,
+                headers: headers,
+                credentials: 'include' // 包含cookie
+            };
+            
+            return await fetch(url, config);
+        }
+        
+        // 加载所有配置
+        async function loadConfigs() {
+            try {
+                const response = await authenticatedFetch('/api/hosts');
+                if (!response.ok) throw new Error('加载配置失败');
+                const configs = await response.json();
+                renderConfigList(configs);
+                
+                // 如果有当前选中的配置，重新设置active状态
+                if (currentConfig) {
+                    const selectedItem = document.querySelector(`.config-item[data-config-id="${currentConfig.id}"]`);
+                    if (selectedItem) {
+                        selectedItem.classList.add('active');
+                        // 显示选中图标
+                        const checkIcon = selectedItem.querySelector('.bi-check-circle-fill');
+                        if (checkIcon) {
+                            checkIcon.classList.remove('d-none');
+                        }
+                    }
+                }
+            } catch (error) {
+                showError('加载配置失败: ' + error.message);
+            }
+        }
+
+        // 渲染配置列表
+        function renderConfigList(configs) {
+            const configList = document.getElementById('configList');
+            configList.innerHTML = '';
+            
+            if (configs.length === 0) {
+                configList.innerHTML = '<div class="text-muted text-center py-3">暂无配置</div>';
+                showEmptyState();
+                return;
+            }
+            
+            // 按创建时间升序排序（先创建的在上面）
+            configs.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            
+            configs.forEach(config => {
+                const item = document.createElement('div');
+                item.className = 'config-item list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+                item.dataset.configId = config.id; // 添加数据属性用于选中状态
+                item.dataset.configKey = config.configKey; // 添加配置标识符到数据属性
+                item.onclick = () => selectConfig(config.id);
+                // 设置背景颜色（带透明度）
+                if (config.color) {
+                    const rgb = hexToRgb(config.color);
+                    if (rgb) {
+                        // 应用透明度（0.2 = 20% 不透明度，80% 透明度）
+                        item.style.backgroundColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.2)`;
+                        // 根据原始颜色调整文字颜色
+                        const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+                        item.style.color = brightness > 128 ? '#000' : '#fff';
+                    }
+                }
+                item.innerHTML = `
+                    <div>
+                        <div class="fw-medium">${config.name}</div>
+                        <small class="text-muted">${config.configKey}</small>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="badge ${config.enabled ? 'bg-success' : 'bg-secondary'} me-2">
+                            ${config.enabled ? '启用' : '禁用'}
+                        </span>
+                        <i class="bi bi-check-circle-fill text-primary d-none"></i>
+                    </div>
+                `;
+                configList.appendChild(item);
+            });
+        }
+
+        // 选择配置
+        async function selectConfig(configId) {
+            try {
+                // 移除所有配置项的active类
+                document.querySelectorAll('.config-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                
+                // 移除API Key管理按钮的选中状态
+                const apiKeyBtn = document.getElementById('apiKeyManagementBtn');
+                if (apiKeyBtn) {
+                    apiKeyBtn.classList.remove('active');
+                }
+                
+                // 隐藏API Key管理面板，显示配置详情面板
+                const apiKeyPanel = document.getElementById('apiKeyPanel');
+                const configDetail = document.getElementById('configDetail');
+                if (apiKeyPanel && configDetail) {
+                    apiKeyPanel.classList.add('d-none');
+                    configDetail.classList.remove('d-none');
+                }
+                
+                // 为当前选中的配置项添加active类并显示选中图标
+                const selectedItem = document.querySelector(`.config-item[data-config-id="${configId}"]`);
+                if (selectedItem) {
+                    selectedItem.classList.add('active');
+                    // 显示选中图标
+                    const checkIcon = selectedItem.querySelector('.bi-check-circle-fill');
+                    if (checkIcon) {
+                        checkIcon.classList.remove('d-none');
+                    }
+                }
+                
+                // 隐藏其他配置项的选中图标
+                document.querySelectorAll('.config-item:not(.active) .bi-check-circle-fill').forEach(icon => {
+                    icon.classList.add('d-none');
+                });
+                
+                const response = await authenticatedFetch(`/api/hosts/id/${configId}`);
+                if (!response.ok) throw new Error('加载配置详情失败');
+                const config = await response.json();
+                currentConfig = config;
+                renderConfigDetail(config);
+                updateSwitchHostsUrl(config.configKey);
+            } catch (error) {
+                showError('加载配置详情失败: ' + error.message);
+            }
+        }
+
+        // 渲染配置详情
+        function renderConfigDetail(config) {
+            if (!config) {
+                // 如果没有配置，显示空状态
+                document.getElementById('emptyState').classList.remove('d-none');
+                document.getElementById('configDetail').classList.add('d-none');
+                return;
+            }
+            
+            document.getElementById('emptyState').classList.add('d-none');
+            document.getElementById('configDetail').classList.remove('d-none');
+            
+            document.getElementById('configTitle').textContent = config.name;
+            document.getElementById('configName').textContent = config.name;
+            document.getElementById('configKey').textContent = config.configKey;
+            document.getElementById('configDescription').textContent = config.description || '-';
+            document.getElementById('configStatus').innerHTML = 
+                config.enabled ? '<span class="status-enabled">启用</span>' : '<span class="status-disabled">禁用</span>';
+            document.getElementById('configCreatedAt').textContent = formatDate(config.createdAt);
+            document.getElementById('configUpdatedAt').textContent = formatDate(config.updatedAt);
+            document.getElementById('configToggleText').textContent = config.enabled ? '禁用' : '启用';
+            
+            renderEntries(config.entries || []);
+        }
+
+        // 渲染条目列表
+        function renderEntries(entries) {
+            const container = document.getElementById('entriesContainer');
+            const count = document.getElementById('entryCount');
+            count.textContent = entries.length;
+            
+            if (entries.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted py-3">暂无条目</div>';
+                return;
+            }
+            
+            // 按排序顺序排序
+            entries.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+            
+            container.innerHTML = '';
+            entries.forEach(entry => {
+                const domains = entry.domains.split(' ').map(domain => 
+                    `<span class="domain-badge badge bg-secondary">${domain}</span>`
+                ).join('');
+                
+                const row = document.createElement('div');
+                row.className = 'entry-row';
+                row.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-medium">${entry.ipAddress}</div>
+                            <div>${domains}</div>
+                            ${entry.comment ? `<small class="text-muted">${entry.comment}</small>` : ''}
+                        </div>
+                        <div class="d-flex gap-2">
+                            <span onclick="toggleEntryEnabled(${entry.id}, ${!entry.enabled})" 
+                                  title="${entry.enabled ? '点击禁用' : '点击启用'}" 
+                                  style="cursor: pointer;">
+                                <i class="bi ${entry.enabled ? 'bi-toggle-on text-success' : 'bi-toggle-off text-secondary'}" style="font-size: 1.2rem;"></i>
+                            </span>
+                            <span onclick="showEditEntryModal(${entry.id})" title="编辑" style="cursor: pointer;">
+                                <i class="bi bi-pencil text-primary" style="font-size: 1.2rem;"></i>
+                            </span>
+                            <span onclick="showDeleteEntryConfirm(${entry.id})" title="删除" style="cursor: pointer;">
+                                <i class="bi bi-trash text-danger" style="font-size: 1.2rem;"></i>
+                            </span>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        // 加载Hosts预览内容（用于模态框和SwitchHosts URL）
+        async function loadHostsPreviewContent(configKey) {
+            try {
+                const response = await fetch(`/api/hosts/raw/${configKey}`);
+                if (!response.ok) throw new Error('加载预览失败');
+                return await response.text();
+            } catch (error) {
+                throw new Error('加载预览失败: ' + error.message);
+            }
+        }
+        
+        // 更新 SwitchHosts URL
+        function updateSwitchHostsUrl(configKey) {
+            const currentUrl = window.location.origin;
+            const switchHostsUrlElement = document.getElementById('switchHostsUrl');
+            if (switchHostsUrlElement) {
+                switchHostsUrlElement.value = `${currentUrl}/api/hosts/raw/${configKey}?apiKey=YOUR_API_KEY`;
+            }
+        }
+        
+        // 显示 Hosts 预览模态框
+        async function showHostsPreviewModal() {
+            if (!currentConfig) return;
+            
+            try {
+                // 加载预览内容
+                const previewContent = await loadHostsPreviewContent(currentConfig.configKey);
+                
+                // 设置模态框标题和标识符
+                document.getElementById('previewConfigName').textContent = currentConfig.name;
+                document.getElementById('previewConfigKey').textContent = `标识符: ${currentConfig.configKey}`;
+                document.getElementById('hostsPreviewModalContent').textContent = previewContent;
+                
+                // 更新SwitchHosts URL（需要API Key）
+                updateSwitchHostsUrl(currentConfig.configKey);
+                
+                // 显示模态框
+                const modal = new bootstrap.Modal(document.getElementById('hostsPreviewModal'));
+                modal.show();
+            } catch (error) {
+                showError('加载Hosts预览失败: ' + error.message);
+            }
+        }
+        
+        // 复制 Hosts 内容到剪贴板
+        async function copyHostsContent() {
+            try {
+                const content = document.getElementById('hostsPreviewModalContent').textContent;
+                await navigator.clipboard.writeText(content);
+                
+                // 显示成功提示
+                const successAlert = document.createElement('div');
+                successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                successAlert.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
+                successAlert.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <strong>Hosts 内容已复制到剪贴板！</strong>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.body.appendChild(successAlert);
+                
+                // 3秒后自动移除
+                setTimeout(() => {
+                    if (successAlert.parentNode) {
+                        successAlert.parentNode.removeChild(successAlert);
+                    }
+                }, 3000);
+            } catch (err) {
+                showError('复制失败，请手动复制内容');
+            }
+        }
+        
+
+        
+
+
+        // 显示空状态
+        function showEmptyState() {
+            document.getElementById('emptyState').classList.remove('d-none');
+            document.getElementById('configDetail').classList.add('d-none');
+            currentConfig = null;
+        }
+
+        // 过滤配置
+        function filterConfigs() {
+            const searchTerm = document.getElementById('searchConfig').value.toLowerCase();
+            const items = document.querySelectorAll('.config-item');
+            items.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        }
+
+        // 显示创建配置模态框
+        function showCreateConfigModal() {
+            const modal = new bootstrap.Modal(document.getElementById('createConfigModal'));
+            modal.show();
+        }
+
+        // 创建配置
+        async function createConfig() {
+            const name = document.getElementById('newConfigName').value.trim();
+            const configKey = document.getElementById('newConfigKey').value.trim();
+            const description = document.getElementById('newConfigDescription').value.trim();
+            const color = document.getElementById('newConfigColor').value;
+            
+            if (!name || !configKey) {
+                showError('配置名称和标识符不能为空');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/hosts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        configKey: configKey,
+                        description: description,
+                        color: color
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || '创建配置失败');
+                }
+                
+                const newConfig = await response.json();
+                await loadConfigs();
+                selectConfig(newConfig.id);
+                
+                // 关闭模态框
+                bootstrap.Modal.getInstance(document.getElementById('createConfigModal')).hide();
+            } catch (error) {
+                showError('创建配置失败: ' + error.message);
+            }
+        }
+
+        // 显示编辑配置模态框
+        function showEditConfigModal() {
+            if (!currentConfig) return;
+            
+            document.getElementById('editConfigId').value = currentConfig.id;
+            document.getElementById('editConfigName').value = currentConfig.name;
+            document.getElementById('editConfigKey').value = currentConfig.configKey;
+            document.getElementById('editConfigDescription').value = currentConfig.description || '';
+            document.getElementById('editConfigEnabled').checked = currentConfig.enabled;
+            document.getElementById('editConfigColor').value = currentConfig.color || '#0d6efd';
+            
+            const modal = new bootstrap.Modal(document.getElementById('editConfigModal'));
+            modal.show();
+        }
+
+        // 更新配置
+        async function updateConfig() {
+            const id = document.getElementById('editConfigId').value;
+            const name = document.getElementById('editConfigName').value.trim();
+            const configKey = document.getElementById('editConfigKey').value.trim();
+            const description = document.getElementById('editConfigDescription').value.trim();
+            const enabled = document.getElementById('editConfigEnabled').checked;
+            const color = document.getElementById('editConfigColor').value;
+            
+            if (!name || !configKey) {
+                showError('配置名称和标识符不能为空');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/hosts/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        configKey: configKey,
+                        description: description,
+                        enabled: enabled,
+                        color: color
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || '更新配置失败');
+                }
+                
+                const updatedConfig = await response.json();
+                currentConfig = updatedConfig;
+                renderConfigDetail(updatedConfig);
+                await loadConfigs(); // 刷新侧边栏
+                
+                // 关闭模态框
+                bootstrap.Modal.getInstance(document.getElementById('editConfigModal')).hide();
+            } catch (error) {
+                showError('更新配置失败: ' + error.message);
+            }
+        }
+
+        // 切换配置启用状态
+        async function toggleConfigEnabled() {
+            if (!currentConfig) return;
+            
+            try {
+                const response = await fetch(`/api/hosts/${currentConfig.id}/toggle-enabled`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        enabled: !currentConfig.enabled
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || '切换状态失败');
+                }
+                
+                const updatedConfig = await response.json();
+                currentConfig = updatedConfig;
+                renderConfigDetail(updatedConfig);
+                await loadConfigs(); // 刷新侧边栏
+            } catch (error) {
+                showError('切换配置状态失败: ' + error.message);
+            }
+        }
+        
+        // 整理排序
+        async function reorderEntries() {
+            if (!currentConfig) return;
+            
+            try {
+                const response = await fetch(`/api/hosts/${currentConfig.id}/reorder-entries`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || '整理排序失败');
+                }
+                
+                const updatedConfig = await response.json();
+                currentConfig = updatedConfig;
+                renderEntries(updatedConfig.entries);
+                updateSwitchHostsUrl(currentConfig.configKey);
+                
+                // 显示成功提示
+                const successAlert = document.createElement('div');
+                successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                successAlert.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
+                successAlert.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <strong>排序已整理完成！</strong>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.body.appendChild(successAlert);
+                
+                // 3秒后自动移除
+                setTimeout(() => {
+                    if (successAlert.parentNode) {
+                        successAlert.parentNode.removeChild(successAlert);
+                    }
+                }, 3000);
+            } catch (error) {
+                showError('整理排序失败: ' + error.message);
+            }
+        }
+        
+        // 快捷切换条目启用/禁用状态
+        async function toggleEntryEnabled(entryId, enabled) {
+            if (!currentConfig) return;
+            
+            try {
+                const response = await fetch(`/api/hosts/entries/${entryId}/toggle-enabled`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        enabled: enabled
+                    }),
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || '切换状态失败');
+                }
+                
+                const updatedEntry = await response.json();
+                // 更新当前配置中的条目状态
+                const entryIndex = currentConfig.entries.findIndex(e => e.id === entryId);
+                if (entryIndex !== -1) {
+                    currentConfig.entries[entryIndex].enabled = updatedEntry.enabled;
+                }
+                renderEntries(currentConfig.entries);
+                updateSwitchHostsUrl(currentConfig.configKey);
+            } catch (error) {
+                showError('切换条目状态失败: ' + error.message);
+            }
+        }
+        
+        // 显示 API Key 管理面板
+        function showApiKeyPanel() {
+            try {
+                // 保存当前配置的configKey用于API Key面板
+                if (currentConfig && currentConfig.configKey) {
+                    // configKey已经保存在currentConfig中，无需额外操作
+                }
+                
+                // 移除所有配置项的选中状态
+                document.querySelectorAll('.config-item').forEach(item => {
+                    item.classList.remove('active');
+                    // 隐藏选中图标
+                    const checkIcon = item.querySelector('.bi-check-circle-fill');
+                    if (checkIcon) {
+                        checkIcon.classList.add('d-none');
+                    }
+                });
+                // 添加API Key管理按钮的选中状态
+                const apiKeyBtn = document.getElementById('apiKeyManagementBtn');
+                if (apiKeyBtn) {
+                    apiKeyBtn.classList.add('active');
+                }
+                
+                document.getElementById('configDetail').classList.add('d-none');
+                document.getElementById('emptyState').classList.add('d-none');
+                document.getElementById('apiKeyPanel').classList.remove('d-none');
+                loadApiKeys();
+            } catch (error) {
+                console.error('显示API Key管理面板失败:', error);
+                showError('显示API Key管理面板失败: ' + error.message);
+            }
+        }
+        
+        // 隐藏 API Key 管理面板
+        function hideApiKeyPanel() {
+            // 移除API Key管理按钮的选中状态
+            const apiKeyBtn = document.getElementById('apiKeyManagementBtn');
+            if (apiKeyBtn) {
+                apiKeyBtn.classList.remove('active');
+            }
+            
+            document.getElementById('apiKeyPanel').classList.add('d-none');
+            
+            // 如果有当前配置，显示配置详情；否则不显示任何内容（既不显示配置详情也不显示空状态）
+            if (currentConfig) {
+                document.getElementById('configDetail').classList.remove('d-none');
+                document.getElementById('emptyState').classList.add('d-none');
+                renderConfigDetail(currentConfig);
+                // 重新添加当前配置的选中状态
+                document.querySelectorAll('.config-item').forEach(item => {
+                    if (item.dataset.configId == currentConfig.id) {
+                        item.classList.add('active');
+                    }
+                });
+            } else {
+                document.getElementById('configDetail').classList.add('d-none');
+                document.getElementById('emptyState').classList.add('d-none');
+            }
+        }
+        
+        // 加载 API Keys
+        async function loadApiKeys() {
+            try {
+                // 并行加载API Keys和配置列表
+                const [apiKeysResponse, configsResponse] = await Promise.all([
+                    fetch('/api/security/api-keys', { credentials: 'include' }),
+                    fetch('/api/hosts', { credentials: 'include' })
+                ]);
+                
+                if (!apiKeysResponse.ok) throw new Error('加载 API Keys 失败');
+                if (!configsResponse.ok) throw new Error('加载配置列表失败');
+                
+                const apiKeys = await apiKeysResponse.json();
+                const configs = await configsResponse.json();
+                
+                // 渲染配置选择器
+                renderConfigSelect(configs);
+                // 渲染API Keys
+                renderApiKeys(apiKeys);
+            } catch (error) {
+                showError('加载数据失败: ' + error.message);
+                document.getElementById('apiKeysList').innerHTML = '<div class="text-muted">加载失败</div>';
+            }
+        }
+        
+        // 渲染配置选择器
+        function renderConfigSelect(configs) {
+            const select = document.getElementById('switchHostsConfigSelect');
+            select.innerHTML = '<option value="">请选择一个配置</option>';
+            
+            configs.forEach(config => {
+                const option = document.createElement('option');
+                option.value = config.configKey;
+                option.textContent = `${config.name} (${config.configKey})`;
+                if (currentConfig && currentConfig.configKey === config.configKey) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        }
+        
+        // 更新SwitchHosts按钮
+        function updateSwitchHostsButtons() {
+            const configKey = document.getElementById('switchHostsConfigSelect').value;
+            if (configKey) {
+                // 重新加载API Keys以更新SwitchHosts按钮
+                loadApiKeysForConfig(configKey);
+            } else {
+                // 移除所有SwitchHosts按钮
+                document.querySelectorAll('.switch-hosts-btn').forEach(btn => {
+                    btn.remove();
+                });
+            }
+        }
+        
+        // 为特定配置加载API Keys并更新SwitchHosts按钮
+        async function loadApiKeysForConfig(configKey) {
+            try {
+                const response = await fetch('/api/security/api-keys', { credentials: 'include' });
+                if (!response.ok) throw new Error('加载 API Keys 失败');
+                const apiKeys = await response.json();
+                renderApiKeys(apiKeys, configKey);
+            } catch (error) {
+                showError('加载 API Keys 失败: ' + error.message);
+            }
+        }
+        
+        // 更新 SwitchHosts API Key 选择框
+        function updateSwitchHostsApiKeySelect(apiKeys) {
+            const select = document.getElementById('switchHostsApiKeySelect');
+            select.innerHTML = '<option value="">请选择一个有效的 API Key</option>';
+            
+            const validKeys = apiKeys.filter(key => !key.revoked);
+            validKeys.forEach(key => {
+                const option = document.createElement('option');
+                option.value = key.key;
+                option.textContent = key.key;
+                select.appendChild(option);
+            });
+            
+            // 如果只有一个有效Key，自动选择它
+            if (validKeys.length === 1) {
+                select.value = validKeys[0].key;
+                generateSwitchHostsUrl(validKeys[0].key);
+            }
+        }
+        
+        // 生成 SwitchHosts 完整URL
+        function generateSwitchHostsUrl(apiKey) {
+            if (!apiKey || !currentConfig) return;
+            
+            const currentUrl = window.location.origin;
+            const fullUrl = `${currentUrl}/api/hosts/raw/${currentConfig.configKey}?apiKey=${apiKey}`;
+            document.getElementById('switchHostsFullUrl').value = fullUrl;
+            document.getElementById('copySwitchHostsBtn').disabled = false;
+        }
+        
+        // 复制 SwitchHosts 完整URL
+        async function copySwitchHostsFullUrl() {
+            const urlInput = document.getElementById('switchHostsFullUrl');
+            if (!urlInput.value) return;
+            
+            try {
+                await navigator.clipboard.writeText(urlInput.value);
+                
+                // 显示成功提示
+                const successAlert = document.createElement('div');
+                successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                successAlert.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
+                successAlert.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <strong>SwitchHosts URL 已复制到剪贴板！</strong>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.body.appendChild(successAlert);
+                
+                // 3秒后自动移除
+                setTimeout(() => {
+                    if (successAlert.parentNode) {
+                        successAlert.parentNode.removeChild(successAlert);
+                    }
+                }, 3000);
+            } catch (err) {
+                showError('复制失败，请手动复制URL');
+            }
+        }
+        
+        // 渲染 API Keys
+        function renderApiKeys(apiKeys, selectedConfigKey = null) {
+            const container = document.getElementById('apiKeysList');
+            if (apiKeys.length === 0) {
+                container.innerHTML = '<div class="text-muted">暂无 API Key</div>';
+                return;
+            }
+            
+            let html = '';
+            apiKeys.forEach(key => {
+                const statusClass = key.revoked ? 'text-danger' : 'text-success';
+                const statusText = key.revoked ? '已作废' : '有效';
+                const createdAt = new Date(key.createdAt).toLocaleString();
+                
+                // 为有效的API Key生成SwitchHosts URL
+                let switchHostsButton = '';
+                if (!key.revoked) {
+                    // 优先使用传入的selectedConfigKey，否则使用现有的逻辑
+                    let configKey = selectedConfigKey;
+                    
+                    if (!configKey) {
+                        // 方式1: 从全局变量
+                        if (currentConfig && currentConfig.configKey) {
+                            configKey = currentConfig.configKey;
+                        }
+                        // 方式2: 从URL参数（如果有的话）
+                        else if (window.location.search.includes('config=')) {
+                            const urlParams = new URLSearchParams(window.location.search);
+                            configKey = urlParams.get('config');
+                        }
+                        // 方式3: 从之前选中的配置项（如果还存在的话）
+                        else {
+                            const activeConfigItem = document.querySelector('.config-item.active');
+                            if (activeConfigItem) {
+                                configKey = activeConfigItem.dataset.configKey;
+                            }
+                        }
+                    }
+                    
+                    if (configKey) {
+                        const currentUrl = window.location.origin;
+                        const switchHostsUrl = `${currentUrl}/api/hosts/raw/${configKey}?apiKey=${key.key}`;
+                        switchHostsButton = `
+                            <button class="btn btn-sm btn-outline-primary switch-hosts-btn" 
+                                    onclick="copySwitchHostsUrl('${switchHostsUrl}')"
+                                    title="复制 SwitchHosts 集成URL">
+                                <i class="bi bi-link-45deg"></i> SwitchHosts
+                            </button>
+                        `;
+                    }
+                }
+                
+                html += `
+                    <div class="card mb-2">
+                        <div class="card-body p-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <code class="bg-light p-1 rounded">${key.key}</code>
+                                    <br>
+                                    <small class="text-muted">创建时间: ${createdAt}</small>
+                                    <span class="badge ${statusClass} ms-2">${statusText}</span>
+                                </div>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-sm btn-outline-secondary" 
+                                            onclick="copyApiKey('${key.key}')"
+                                            title="复制 API Key">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                    ${switchHostsButton}
+                                    <button class="btn btn-sm btn-outline-danger" 
+                                            onclick="revokeApiKey('${key.key}')"
+                                            ${key.revoked ? 'disabled' : ''}>
+                                        作废
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+        
+        // 生成新 API Key
+        async function generateApiKey() {
+            try {
+                const response = await fetch('/api/security/api-keys', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                if (!response.ok) throw new Error('生成 API Key 失败');
+                const apiKey = await response.text();
+                
+                // 显示成功提示
+                const successAlert = document.createElement('div');
+                successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                successAlert.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
+                successAlert.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <strong>API Key 生成成功！</strong>
+                        <br>
+                        <small class="mt-1">${apiKey}</small>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.body.appendChild(successAlert);
+                
+                // 3秒后自动移除
+                setTimeout(() => {
+                    if (successAlert.parentNode) {
+                        successAlert.parentNode.removeChild(successAlert);
+                    }
+                }, 5000);
+                
+                loadApiKeys();
+            } catch (error) {
+                showError('生成 API Key 失败: ' + error.message);
+            }
+        }
+        
+        // 复制 SwitchHosts URL 到剪贴板
+        async function copySwitchHostsUrl(url) {
+            try {
+                await navigator.clipboard.writeText(url);
+                // 显示成功提示
+                const successAlert = document.createElement('div');
+                successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                successAlert.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
+                successAlert.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <strong>SwitchHosts URL 已复制到剪贴板！</strong>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.body.appendChild(successAlert);
+                
+                // 3秒后自动移除
+                setTimeout(() => {
+                    if (successAlert.parentNode) {
+                        successAlert.parentNode.removeChild(successAlert);
+                    }
+                }, 3000);
+            } catch (err) {
+                showError('复制失败，请手动复制URL');
+            }
+        }
+        
+        // 复制 API Key 到剪贴板
+        async function copyApiKey(key) {
+            try {
+                await navigator.clipboard.writeText(key);
+                // 显示成功提示
+                const successAlert = document.createElement('div');
+                successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+                successAlert.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
+                successAlert.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <strong>API Key 已复制到剪贴板！</strong>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.body.appendChild(successAlert);
+                
+                // 3秒后自动移除
+                setTimeout(() => {
+                    if (successAlert.parentNode) {
+                        successAlert.parentNode.removeChild(successAlert);
+                    }
+                }, 3000);
+            } catch (err) {
+                showError('复制失败，请手动复制API Key');
+            }
+        }
+        
+        // 作废 API Key
+        async function revokeApiKey(key) {
+            if (!confirm('确定要作废此 API Key 吗？此操作不可恢复！')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/security/api-keys/${key}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                if (!response.ok) throw new Error('作废 API Key 失败');
+                
+                loadApiKeys();
+            } catch (error) {
+                showError('作废 API Key 失败: ' + error.message);
+            }
+        }
+
+
+        // 显示创建条目模态框
+        function showCreateEntryModal() {
+            if (!currentConfig) {
+                showError('请先选择一个配置');
+                return;
+            }
+            
+            // 计算下一个排序顺序（当前最大值+1），确保从1开始
+            let nextSortOrder = 1;
+            if (currentConfig.entries && currentConfig.entries.length > 0) {
+                const maxSortOrder = Math.max(...currentConfig.entries.map(entry => 
+                    entry.sortOrder != null ? entry.sortOrder : 0
+                ));
+                nextSortOrder = maxSortOrder + 1;
+            }
+            
+            // 设置排序顺序输入框的值
+            document.getElementById('newEntrySortOrder').value = nextSortOrder;
+            
+            const modal = new bootstrap.Modal(document.getElementById('createEntryModal'));
+            modal.show();
+        }
+
+        // 将条目列表转为 hosts 文本
+        function entriesToText(entries) {
+            return entries
+                .slice()
+                .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+                .map(entry => {
+                    let line = entry.ipAddress + ' ' + entry.domains;
+                    if (entry.comment) line += ' # ' + entry.comment;
+                    if (!entry.enabled) line = '# ' + line;
+                    return line;
+                })
+                .join('\n');
+        }
+
+        // 显示文本编辑器模态框
+        function showTextEditorModal() {
+            if (!currentConfig) {
+                showError('请先选择一个配置');
+                return;
+            }
+            const textarea = document.getElementById('textEditorContent');
+            textarea.value = entriesToText(currentConfig.entries || []);
+            document.getElementById('textEditorConfigName').textContent = currentConfig.name;
+            updateTextEditorLineCount();
+            textarea.addEventListener('input', updateTextEditorLineCount);
+            const modal = new bootstrap.Modal(document.getElementById('textEditorModal'));
+            modal.show();
+        }
+
+        function updateTextEditorLineCount() {
+            const textarea = document.getElementById('textEditorContent');
+            const lines = textarea.value.split('\n').filter(l => l.trim() && !l.trim().startsWith('#') || (l.trim().startsWith('#') && /^#\s*[\d:]/.test(l.trim())));
+            document.getElementById('textEditorLineCount').textContent = `共 ${lines.length} 条有效条目`;
+        }
+
+        // 保存文本编辑器内容
+        async function saveTextEditor() {
+            if (!currentConfig) return;
+            const text = document.getElementById('textEditorContent').value;
+            try {
+                const response = await fetch(`/api/hosts/${currentConfig.id}/entries/replace`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+                    credentials: 'include',
+                    body: text
+                });
+                if (!response.ok) {
+                    const err = await response.text();
+                    throw new Error(err || '保存失败');
+                }
+                const updatedConfig = await response.json();
+                currentConfig = updatedConfig;
+                renderConfigDetail(updatedConfig);
+                bootstrap.Modal.getInstance(document.getElementById('textEditorModal')).hide();
+                showSuccess('条目已保存');
+            } catch (error) {
+                showError('保存失败: ' + error.message);
+            }
+        }
+
+        // 显示批量导入模态框
+        function showImportModal() {
+            if (!currentConfig) {
+                showError('请先选择一个配置');
+                return;
+            }
+            
+            // 重置模态框状态
+            document.getElementById('importFile').value = '';
+            document.getElementById('importPreview').classList.add('d-none');
+            document.querySelector('input[name="importType"][value="hosts"]').checked = true;
+            document.querySelector('input[name="conflictAction"][value="skip"]').checked = true;
+            
+            const modal = new bootstrap.Modal(document.getElementById('importModal'));
+            modal.show();
+        }
+
+        // 预览导入内容
+        async function previewImport() {
+            const fileInput = document.getElementById('importFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showError('请选择要导入的文件');
+                return;
+            }
+            
+            try {
+                const importType = document.querySelector('input[name="importType"]:checked').value;
+                let entries = [];
+                
+                if (importType === 'hosts') {
+                    const content = await readFileAsText(file);
+                    entries = parseHostsContent(content);
+                } else if (importType === 'json') {
+                    const content = await readFileAsText(file);
+                    entries = parseJsonContent(content);
+                }
+                
+                if (entries.length === 0) {
+                    showError('文件中没有有效的条目');
+                    return;
+                }
+                
+                // 显示预览
+                displayImportPreview(entries);
+            } catch (error) {
+                showError('解析文件失败: ' + error.message);
+            }
+        }
+
+        // 执行导入
+        async function executeImport() {
+            const fileInput = document.getElementById('importFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showError('请选择要导入的文件');
+                return;
+            }
+            
+            if (!confirm('确定要导入这些条目吗？')) {
+                return;
+            }
+            
+            try {
+                const importType = document.querySelector('input[name="importType"]:checked').value;
+                const conflictAction = document.querySelector('input[name="conflictAction"]:checked').value;
+                let entries = [];
+                
+                if (importType === 'hosts') {
+                    const content = await readFileAsText(file);
+                    entries = parseHostsContent(content);
+                } else if (importType === 'json') {
+                    const content = await readFileAsText(file);
+                    entries = parseJsonContent(content);
+                }
+                
+                if (entries.length === 0) {
+                    showError('文件中没有有效的条目');
+                    return;
+                }
+                
+                // 处理冲突并导入
+                await processAndImportEntries(entries, conflictAction);
+                
+                // 关闭模态框
+                bootstrap.Modal.getInstance(document.getElementById('importModal')).hide();
+                
+                // 刷新配置显示
+                await selectConfig(currentConfig.id);
+            } catch (error) {
+                showError('导入失败: ' + error.message);
+            }
+        }
+
+        // 读取文件为文本
+        function readFileAsText(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = (e) => reject(new Error('读取文件失败'));
+                reader.readAsText(file, 'UTF-8');
+            });
+        }
+
+        // 解析 Hosts 文件内容
+        function parseHostsContent(content) {
+            const lines = content.split('\n');
+            const entries = [];
+            let lineNumber = 0;
+            let lastComment = ''; // 用于存储上一行的注释
+            
+            for (const line of lines) {
+                lineNumber++;
+                const originalLine = line.trim();
+                
+                // 跳过空行
+                if (!originalLine) {
+                    lastComment = ''; // 空行清空上一行注释
+                    continue;
+                }
+                
+                // 提取行末注释（#后面的内容）
+                let comment = '';
+                let processedLine = originalLine;
+                const commentIndex = originalLine.indexOf('#');
+                if (commentIndex !== -1) {
+                    // 检查#是否在引号内（简化处理，假设注释不会包含#）
+                    const beforeComment = originalLine.substring(0, commentIndex).trim();
+                    if (beforeComment) {
+                        // 有实际内容，提取注释
+                        comment = originalLine.substring(commentIndex + 1).trim();
+                        processedLine = beforeComment;
+                    } else {
+                        // 整行都是注释，存储为上一行注释，但不创建条目
+                        lastComment = originalLine.substring(commentIndex + 1).trim();
+                        continue;
+                    }
+                }
+                
+                // 跳过纯注释行
+                if (!processedLine) {
+                    continue;
+                }
+                
+                // 分割IP和域名
+                const parts = processedLine.split(/\s+/);
+                if (parts.length < 2) {
+                    // 如果是纯注释行（没有IP和域名），更新lastComment
+                    if (originalLine.startsWith('#')) {
+                        lastComment = originalLine.substring(1).trim();
+                    }
+                    continue; // 无效行
+                }
+                
+                const ipAddress = parts[0];
+                const domains = parts.slice(1).join(' ');
+                
+                // 验证IP地址格式（简单验证）
+                if (!isValidIpAddress(ipAddress)) {
+                    continue;
+                }
+                
+                // 如果没有行尾注释，使用上一行的注释（如果存在）
+                if (!comment && lastComment) {
+                    comment = lastComment;
+                }
+                
+                // 重置上一行注释，因为当前行已经处理了
+                lastComment = '';
+                
+                entries.push({
+                    ipAddress: ipAddress,
+                    domains: domains,
+                    comment: comment,
+                    sortOrder: entries.length + 1
+                });
+            }
+            
+            return entries;
+        }
+
+        // 解析 JSON 文件内容
+        function parseJsonContent(content) {
+            try {
+                const data = JSON.parse(content);
+                const entries = [];
+                
+                if (Array.isArray(data)) {
+                    // 数组格式：[{ipAddress: "...", domains: "...", comment: "..."}, ...]
+                    for (let i = 0; i < data.length; i++) {
+                        const item = data[i];
+                        if (item.ipAddress && item.domains) {
+                            entries.push({
+                                ipAddress: item.ipAddress,
+                                domains: item.domains,
+                                comment: item.comment || `导入自JSON文件，索引${i}`,
+                                sortOrder: entries.length + 1
+                            });
+                        }
+                    }
+                } else if (data.entries && Array.isArray(data.entries)) {
+                    // 对象格式：{entries: [...]}
+                    for (let i = 0; i < data.entries.length; i++) {
+                        const item = data.entries[i];
+                        if (item.ipAddress && item.domains) {
+                            entries.push({
+                                ipAddress: item.ipAddress,
+                                domains: item.domains,
+                                comment: item.comment || `导入自JSON文件，索引${i}`,
+                                sortOrder: entries.length + 1
+                            });
+                        }
+                    }
+                }
+                
+                return entries;
+            } catch (error) {
+                throw new Error('JSON格式无效: ' + error.message);
+            }
+        }
+
+        // 验证IP地址格式
+        function isValidIpAddress(ip) {
+            // IPv4 验证
+            const ipv4Pattern = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+            if (ipv4Pattern.test(ip)) {
+                const parts = ip.match(ipv4Pattern);
+                return parts.slice(1).every(part => parseInt(part) >= 0 && parseInt(part) <= 255);
+            }
+            
+            // IPv6 验证（简化版）
+            const ipv6Pattern = /^[0-9a-fA-F:]+$/;
+            if (ipv6Pattern.test(ip) && ip.includes(':')) {
+                return true;
+            }
+            
+            return false;
+        }
+
+        // 显示导入预览
+        function displayImportPreview(entries) {
+            const previewContent = document.getElementById('previewContent');
+            const previewCount = document.getElementById('previewCount');
+            const importPreview = document.getElementById('importPreview');
+            
+            let html = '';
+            for (let i = 0; i < Math.min(entries.length, 20); i++) {
+                const entry = entries[i];
+                html += `${entry.ipAddress} ${entry.domains}`;
+                if (entry.comment) {
+                    html += ` # ${entry.comment}`;
+                }
+                html += '\n';
+            }
+            
+            if (entries.length > 20) {
+                html += `\n... 还有 ${entries.length - 20} 条`;
+            }
+            
+            previewContent.textContent = html;
+            previewCount.textContent = entries.length;
+            importPreview.classList.remove('d-none');
+        }
+
+        // 处理冲突并导入条目
+        async function processAndImportEntries(newEntries, conflictAction) {
+            // 收集现有域名映射
+            const existingDomains = new Map();
+            if (currentConfig.entries) {
+                currentConfig.entries.forEach(entry => {
+                    const entryDomains = entry.domains.split(/\s+/).filter(d => d.trim() !== '');
+                    entryDomains.forEach(domain => {
+                        existingDomains.set(domain, entry.id);
+                    });
+                });
+            }
+            
+            // 检查冲突并处理
+            const entriesToImport = [];
+            const conflicts = [];
+            
+            for (const newEntry of newEntries) {
+                const newDomains = newEntry.domains.split(/\s+/).filter(d => d.trim() !== '');
+                let hasConflict = false;
+                let conflictingDomains = [];
+                
+                // 检查每个新域名是否冲突
+                for (const domain of newDomains) {
+                    if (existingDomains.has(domain)) {
+                        hasConflict = true;
+                        conflictingDomains.push(domain);
+                    }
+                }
+                
+                if (hasConflict) {
+                    if (conflictAction === 'abort') {
+                        // 终止导入
+                        throw new Error(`发现重复域名，终止导入: ${conflictingDomains.join(', ')}`);
+                    } else if (conflictAction === 'skip') {
+                        // 跳过此条目
+                        continue;
+                    } else if (conflictAction === 'overwrite') {
+                        // 覆盖：需要删除现有条目，然后添加新条目
+                        // 这里我们标记需要覆盖的条目
+                        entriesToImport.push({...newEntry, overwrite: true, conflictingDomains});
+                    }
+                } else {
+                    // 无冲突，直接添加
+                    entriesToImport.push({...newEntry, overwrite: false});
+                }
+            }
+            
+            // 执行导入
+            if (entriesToImport.length === 0) {
+                throw new Error('没有可导入的条目');
+            }
+            
+            // 发送批量导入请求
+            const response = await fetch(`/api/hosts/${currentConfig.id}/batch-import`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    entries: entriesToImport,
+                    conflictAction: conflictAction
+                })
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || '批量导入失败');
+            }
+        }
+
+        // 创建条目
+        async function createEntry() {
+            const configId = currentConfig.id;
+            const ipAddress = document.getElementById('newEntryIp').value.trim();
+            const domains = document.getElementById('newEntryDomains').value.trim();
+            const comment = document.getElementById('newEntryComment').value.trim();
+            const sortOrder = parseInt(document.getElementById('newEntrySortOrder').value) || 0;
+            
+            if (!ipAddress || !domains) {
+                showError('IP地址和域名列表不能为空');
+                return;
+            }
+            
+            // 校验域名重复
+            const newDomainList = domains.split(/\s+/).filter(d => d.trim() !== '');
+            const existingDomains = new Map(); // 存储域名到条目信息的映射
+            
+            // 收集当前配置中所有已存在的域名
+            if (currentConfig.entries) {
+                currentConfig.entries.forEach(entry => {
+                    const entryDomains = entry.domains.split(/\s+/).filter(d => d.trim() !== '');
+                    entryDomains.forEach(domain => {
+                        if (!existingDomains.has(domain)) {
+                            existingDomains.set(domain, {
+                                ip: entry.ipAddress,
+                                comment: entry.comment || ''
+                            });
+                        }
+                    });
+                });
+            }
+            
+            // 检查新域名是否与现有域名重复
+            const duplicateDomains = [];
+            for (const newDomain of newDomainList) {
+                if (existingDomains.has(newDomain)) {
+                    const existingEntry = existingDomains.get(newDomain);
+                    duplicateDomains.push({
+                        domain: newDomain,
+                        existingIp: existingEntry.ip,
+                        existingComment: existingEntry.comment
+                    });
+                }
+            }
+            
+            if (duplicateDomains.length > 0) {
+                let message = '域名冲突！以下域名已存在于当前配置中：\n\n';
+                duplicateDomains.forEach(dup => {
+                    message += `• ${dup.domain} (IP: ${dup.existingIp}`;
+                    if (dup.existingComment) {
+                        message += `, 注释: ${dup.existingComment}`;
+                    }
+                    message += ')\n';
+                });
+                message += '\n请修改域名列表后重试。';
+                alert(message);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/hosts/${configId}/entries`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ipAddress: ipAddress,
+                        domains: domains,
+                        comment: comment,
+                        sortOrder: sortOrder
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || '创建条目失败');
+                }
+                
+                const newEntry = await response.json();
+                
+                // 为了确保数据一致性，重新加载整个配置
+                await selectConfig(currentConfig.id);
+                
+                // 关闭模态框
+                bootstrap.Modal.getInstance(document.getElementById('createEntryModal')).hide();
+            } catch (error) {
+                showError('创建条目失败: ' + error.message);
+            }
+        }
+
+        // 显示编辑条目模态框
+        function showEditEntryModal(entryId) {
+            if (!currentConfig) return;
+            
+            const entry = currentConfig.entries.find(e => e.id === entryId);
+            if (!entry) return;
+            
+            document.getElementById('editEntryId').value = entry.id;
+            document.getElementById('editEntryIp').value = entry.ipAddress;
+            document.getElementById('editEntryDomains').value = entry.domains;
+            document.getElementById('editEntryComment').value = entry.comment || '';
+            document.getElementById('editEntrySortOrder').value = entry.sortOrder || 0;
+            document.getElementById('editEntryEnabled').checked = entry.enabled;
+            
+            const modal = new bootstrap.Modal(document.getElementById('editEntryModal'));
+            modal.show();
+        }
+
+        // 更新条目
+        async function updateEntry() {
+            const entryId = document.getElementById('editEntryId').value;
+            const ipAddress = document.getElementById('editEntryIp').value.trim();
+            const domains = document.getElementById('editEntryDomains').value.trim();
+            const comment = document.getElementById('editEntryComment').value.trim();
+            const sortOrder = parseInt(document.getElementById('editEntrySortOrder').value) || 0;
+            const enabled = document.getElementById('editEntryEnabled').checked;
+            
+            if (!ipAddress || !domains) {
+                showError('IP地址和域名列表不能为空');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/hosts/entries/${entryId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ipAddress: ipAddress,
+                        domains: domains,
+                        comment: comment,
+                        sortOrder: sortOrder,
+                        enabled: enabled
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || '更新条目失败');
+                }
+                
+                const updatedEntry = await response.json();
+                
+                // 为了确保数据一致性，重新加载整个配置
+                await selectConfig(currentConfig.id);
+                
+                // 关闭模态框
+                bootstrap.Modal.getInstance(document.getElementById('editEntryModal')).hide();
+            } catch (error) {
+                showError('更新条目失败: ' + error.message);
+            }
+        }
+
+        // 切换条目启用状态
+        async function toggleEntryEnabled(entryId) {
+            const entry = currentConfig.entries.find(e => e.id === entryId);
+            if (!entry) return;
+            
+            try {
+                const response = await fetch(`/api/hosts/entries/${entryId}/toggle-enabled`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        enabled: !entry.enabled
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || '切换状态失败');
+                }
+                
+                const updatedEntry = await response.json();
+                
+                // 为了确保数据一致性，重新加载整个配置
+                await selectConfig(currentConfig.id);
+            } catch (error) {
+                showError('切换条目状态失败: ' + error.message);
+            }
+        }
+
+        // 显示删除配置确认
+        function showDeleteConfigConfirm() {
+            if (!currentConfig) return;
+            
+            document.getElementById('deleteMessage').textContent = 
+                `确定要删除配置 "${currentConfig.name}" 吗？`;
+            deleteType = 'config';
+            deleteId = currentConfig.id;
+            
+            const modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
+            modal.show();
+        }
+
+        // 显示删除条目确认
+        function showDeleteEntryConfirm(entryId) {
+            const entry = currentConfig.entries.find(e => e.id === entryId);
+            if (!entry) return;
+            
+            document.getElementById('deleteMessage').textContent = 
+                `确定要删除条目 "${entry.ipAddress} ${entry.domains}" 吗？`;
+            deleteType = 'entry';
+            deleteId = entryId;
+            
+            const modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
+            modal.show();
+        }
+
+        // 删除配置
+        async function deleteConfig() {
+            if (!currentConfig) return;
+            
+            try {
+                const response = await fetch(`/api/hosts/${currentConfig.id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || '删除配置失败');
+                }
+                
+                await loadConfigs();
+                showEmptyState();
+            } catch (error) {
+                showError('删除配置失败: ' + error.message);
+            }
+        }
+
+        // 删除条目
+        async function deleteEntry(entryId) {
+            try {
+                const response = await fetch(`/api/hosts/entries/${entryId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || '删除条目失败');
+                }
+                
+                // 为了确保数据一致性，重新加载整个配置
+                await selectConfig(currentConfig.id);
+            } catch (error) {
+                showError('删除条目失败: ' + error.message);
+            }
+        }
+
+        // 确认删除按钮点击
+        document.getElementById('confirmDeleteBtn').onclick = function() {
+            if (deleteType === 'config') {
+                deleteConfig();
+            } else if (deleteType === 'entry') {
+                deleteEntry(deleteId);
+            }
+            bootstrap.Modal.getInstance(document.getElementById('confirmDeleteModal')).hide();
+        };
+
+        // 格式化日期
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN');
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            // 简单的错误提示（在实际项目中可以使用更完善的toast通知）
+            alert('错误: ' + message);
+        }
+
+        function showSuccess(message) {
+            const el = document.createElement('div');
+            el.className = 'alert alert-success alert-dismissible fade show position-fixed';
+            el.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
+            el.innerHTML = `<div class="d-flex align-items-center"><i class="bi bi-check-circle-fill me-2"></i><strong>${message}</strong></div><button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            document.body.appendChild(el);
+            setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 3000);
+        }
+
+        // 十六进制颜色转RGB
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : null;
+        }
+
+        // 退出功能
+        function logout() {
+            if (!confirm('确定要退出吗？')) {
+                return;
+            }
+            
+            // Spring Security默认提供/logout端点，直接重定向即可
+            window.location.href = '/logout';
+        }
+        
+        // 回到顶部函数
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+    </script>
+</body>
+</html>
