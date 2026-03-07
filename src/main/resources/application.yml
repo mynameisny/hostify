@@ -4,8 +4,11 @@ server:
 spring:
   application:
     name: hostify
+    version: 1.0.0
   profiles:
     active: ${DATABASE_PROFILE:mysql}
   config:
     import: application-security.yml
-
+  banner:
+    location: classpath:banner/hostify.txt
+    charset: UTF-8

@@ -139,6 +139,12 @@
                                 批量导入指南
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#docker-doc" id="docker-link">
+                                <i class="bi bi-box"></i>
+                                Docker 部署指南
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </nav>
@@ -167,6 +173,15 @@
                     <hr>
                     <!-- 这里将通过 JavaScript 动态加载内容 -->
                     <div id="batch-content"></div>
+                </div>
+
+                <!-- Docker 部署指南 -->
+                <div id="docker-doc" class="markdown-content mt-4">
+                    <h1>Docker 部署指南</h1>
+                    <p>使用 Docker 快速部署 Hostify 服务。</p>
+                    <p><a href="DOCKER_GUIDE.md" target="_blank" class="btn btn-primary"><i class="bi bi-download"></i> 下载原始 Markdown 文件</a></p>
+                    <hr>
+                    <div id="docker-content"></div>
                 </div>
 
                 <!-- 回到顶部按钮 -->
@@ -208,7 +223,8 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadMarkdownFile('arch.md', 'arch-content');
             loadMarkdownFile('BATCH_IMPORT_GUIDE.md', 'batch-content');
-            
+            loadMarkdownFile('DOCKER_GUIDE.md', 'docker-content');
+
             // 侧边栏导航点击事件
             document.getElementById('arch-link').addEventListener('click', function(e) {
                 e.preventDefault();
@@ -216,12 +232,19 @@
                 this.classList.add('active');
                 document.getElementById('arch-doc').scrollIntoView({ behavior: 'smooth' });
             });
-            
+
             document.getElementById('batch-link').addEventListener('click', function(e) {
                 e.preventDefault();
                 document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
                 this.classList.add('active');
                 document.getElementById('batch-import-doc').scrollIntoView({ behavior: 'smooth' });
+            });
+
+            document.getElementById('docker-link').addEventListener('click', function(e) {
+                e.preventDefault();
+                document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+                this.classList.add('active');
+                document.getElementById('docker-doc').scrollIntoView({ behavior: 'smooth' });
             });
         });
 
@@ -234,9 +257,13 @@
         window.addEventListener('scroll', function() {
             const archPos = document.getElementById('arch-doc').offsetTop;
             const batchPos = document.getElementById('batch-import-doc').offsetTop;
+            const dockerPos = document.getElementById('docker-doc').offsetTop;
             const currentPos = window.scrollY + 100;
-            
-            if (currentPos >= batchPos) {
+
+            if (currentPos >= dockerPos) {
+                document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+                document.getElementById('docker-link').classList.add('active');
+            } else if (currentPos >= batchPos) {
                 document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
                 document.getElementById('batch-link').classList.add('active');
             } else if (currentPos >= archPos) {

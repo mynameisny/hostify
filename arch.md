@@ -272,10 +272,46 @@ java -jar target/hostify-0.0.1-SNAPSHOT.jar --spring.profiles.active=mysql
 
 ---
 
-## 关键设计决策
+## Docker 部署
 
-1. **N+1 防止**：Repository 全部使用 JOIN FETCH 查询，确保条目随配置一次性加载
-2. **双向关系管理**：通过 `HostsConfig.addEntry()` / `removeEntry()` 同时维护两侧引用
-3. **全量文本替换**：`replaceEntriesFromText` 先 `clear()` 再批量 `addEntry()`，在单事务内原子完成；禁用条目用 `# ip domain` 表示
-4. **H2 Console 手动注册**：Spring Boot 4（Jakarta EE）下自动配置条件未生效，通过 `H2ConsoleConfig` 显式注册 `JakartaWebServlet`
-5. **brace style**：全部 Java 代码使用 Allman 风格（开大括号另起一行）
+项目根目录提供 `Dockerfile`，采用多阶段构建：
+
+- **builder 阶段**：`maven:3.9-eclipse-temurin-21`，编译打包
+- **runtime 阶段**：`eclipse-temurin:21-jre-jammy`，仅含 JRE，镜像更小
+- 以非 root 系统用户 `hostify` 运行
+- JVM 参数 `-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0`，自动感知容器内存限制
+- `/app/data` 用于 H2 文件模式持久化
+
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `DATABASE_PROFILE` | `h2` | 数据库选择：`h2` 或 `mysql` |
+| `ADMIN_USERNAME` | `admin` | 管理员用户名 |
+| `ADMIN_PASSWORD` | `admin` | 管理员密码 |
+| `MYSQL_URL` | `jdbc:mysql://localhost:3306/hostify?...` | MySQL 连接串（mysql 模式） |
+| `MYSQL_USERNAME` | `root` | MySQL 用户名（mysql 模式） |
+| `MYSQL_PASSWORD` | （空） | MySQL 密码（mysql 模式） |
+
+### 构建与运行命令
+
+```bash
+# 构建镜像
+docker build -t hostify .
+
+# H2 模式（数据持久化到 volume）
+docker run -d -p 8080:8080 \
+  -e ADMIN_PASSWORD=your_password \
+  -v hostify-data:/app/data \
+  --name hostify hostify
+
+# MySQL 模式
+docker run -d -p 8080:8080 \
+  -e DATABASE_PROFILE=mysql \
+  -e MYSQL_URL=jdbc:mysql://host:3306/hostify \
+  -e MYSQL_USERNAME=user \
+  -e MYSQL_PASSWORD=secret \
+  -e ADMIN_PASSWORD=your_password \
+  --name hostify hostify
+```
+

@@ -162,6 +162,7 @@
                                     <includes>
                                         <include>arch.md</include>
                                         <include>BATCH_IMPORT_GUIDE.md</include>
+                                        <include>DOCKER_GUIDE.md</include>
                                     </includes>
                                     <filtering>false</filtering>
                                 </resource>
