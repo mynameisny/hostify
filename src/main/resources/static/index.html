@@ -886,29 +886,38 @@
         
         // 复制 Hosts 内容到剪贴板
         async function copyHostsContent() {
+            const content = document.getElementById('hostsPreviewModalContent').textContent;
+            
+            // 方法1: 使用现代 Clipboard API
+            if (navigator.clipboard && window.isSecureContext) {
+                try {
+                    await navigator.clipboard.writeText(content);
+                    showCopySuccess('Hosts 内容已复制到剪贴板！');
+                    return;
+                } catch (err) {
+                    // 如果现代API失败，尝试回退方法
+                }
+            }
+            
+            // 方法2: 使用临时textarea元素进行复制
             try {
-                const content = document.getElementById('hostsPreviewModalContent').textContent;
-                await navigator.clipboard.writeText(content);
+                const textArea = document.createElement('textarea');
+                textArea.value = content;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
                 
-                // 显示成功提示
-                const successAlert = document.createElement('div');
-                successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
-                successAlert.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
-                successAlert.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-check-circle-fill me-2"></i>
-                        <strong>Hosts 内容已复制到剪贴板！</strong>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                `;
-                document.body.appendChild(successAlert);
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
                 
-                // 3秒后自动移除
-                setTimeout(() => {
-                    if (successAlert.parentNode) {
-                        successAlert.parentNode.removeChild(successAlert);
-                    }
-                }, 3000);
+                if (successful) {
+                    showCopySuccess('Hosts 内容已复制到剪贴板！');
+                } else {
+                    showError('复制失败，请手动复制内容');
+                }
             } catch (err) {
                 showError('复制失败，请手动复制内容');
             }
@@ -1313,31 +1322,52 @@
             const urlInput = document.getElementById('switchHostsFullUrl');
             if (!urlInput.value) return;
             
+            // 方法1: 使用现代 Clipboard API
+            if (navigator.clipboard && window.isSecureContext) {
+                try {
+                    await navigator.clipboard.writeText(urlInput.value);
+                    showCopySuccess('SwitchHosts URL 已复制到剪贴板！');
+                    return;
+                } catch (err) {
+                    // 如果现代API失败，尝试回退方法
+                }
+            }
+            
+            // 方法2: 使用 document.execCommand (兼容性回退)
             try {
-                await navigator.clipboard.writeText(urlInput.value);
-                
-                // 显示成功提示
-                const successAlert = document.createElement('div');
-                successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
-                successAlert.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
-                successAlert.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-check-circle-fill me-2"></i>
-                        <strong>SwitchHosts URL 已复制到剪贴板！</strong>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                `;
-                document.body.appendChild(successAlert);
-                
-                // 3秒后自动移除
-                setTimeout(() => {
-                    if (successAlert.parentNode) {
-                        successAlert.parentNode.removeChild(successAlert);
-                    }
-                }, 3000);
+                urlInput.select();
+                urlInput.setSelectionRange(0, 99999); // 移动设备支持
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showCopySuccess('SwitchHosts URL 已复制到剪贴板！');
+                } else {
+                    showError('复制失败，请手动复制URL');
+                }
             } catch (err) {
                 showError('复制失败，请手动复制URL');
             }
+        }
+        
+        // 显示复制成功提示
+        function showCopySuccess(message) {
+            const successAlert = document.createElement('div');
+            successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+            successAlert.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
+            successAlert.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    <strong>${message}</strong>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(successAlert);
+            
+            // 3秒后自动移除
+            setTimeout(() => {
+                if (successAlert.parentNode) {
+                    successAlert.parentNode.removeChild(successAlert);
+                }
+            }, 3000);
         }
         
         // 渲染 API Keys
@@ -1463,27 +1493,36 @@
         
         // 复制 SwitchHosts URL 到剪贴板
         async function copySwitchHostsUrl(url) {
+            // 方法1: 使用现代 Clipboard API
+            if (navigator.clipboard && window.isSecureContext) {
+                try {
+                    await navigator.clipboard.writeText(url);
+                    showCopySuccess('SwitchHosts URL 已复制到剪贴板！');
+                    return;
+                } catch (err) {
+                    // 如果现代API失败，尝试回退方法
+                }
+            }
+            
+            // 方法2: 使用临时textarea元素进行复制
             try {
-                await navigator.clipboard.writeText(url);
-                // 显示成功提示
-                const successAlert = document.createElement('div');
-                successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
-                successAlert.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
-                successAlert.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-check-circle-fill me-2"></i>
-                        <strong>SwitchHosts URL 已复制到剪贴板！</strong>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                `;
-                document.body.appendChild(successAlert);
+                const textArea = document.createElement('textarea');
+                textArea.value = url;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
                 
-                // 3秒后自动移除
-                setTimeout(() => {
-                    if (successAlert.parentNode) {
-                        successAlert.parentNode.removeChild(successAlert);
-                    }
-                }, 3000);
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                if (successful) {
+                    showCopySuccess('SwitchHosts URL 已复制到剪贴板！');
+                } else {
+                    showError('复制失败，请手动复制URL');
+                }
             } catch (err) {
                 showError('复制失败，请手动复制URL');
             }
@@ -1491,27 +1530,36 @@
         
         // 复制 API Key 到剪贴板
         async function copyApiKey(key) {
+            // 方法1: 使用现代 Clipboard API
+            if (navigator.clipboard && window.isSecureContext) {
+                try {
+                    await navigator.clipboard.writeText(key);
+                    showCopySuccess('API Key 已复制到剪贴板！');
+                    return;
+                } catch (err) {
+                    // 如果现代API失败，尝试回退方法
+                }
+            }
+            
+            // 方法2: 使用临时textarea元素进行复制
             try {
-                await navigator.clipboard.writeText(key);
-                // 显示成功提示
-                const successAlert = document.createElement('div');
-                successAlert.className = 'alert alert-success alert-dismissible fade show position-fixed';
-                successAlert.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
-                successAlert.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-check-circle-fill me-2"></i>
-                        <strong>API Key 已复制到剪贴板！</strong>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                `;
-                document.body.appendChild(successAlert);
+                const textArea = document.createElement('textarea');
+                textArea.value = key;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
                 
-                // 3秒后自动移除
-                setTimeout(() => {
-                    if (successAlert.parentNode) {
-                        successAlert.parentNode.removeChild(successAlert);
-                    }
-                }, 3000);
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                if (successful) {
+                    showCopySuccess('API Key 已复制到剪贴板！');
+                } else {
+                    showError('复制失败，请手动复制API Key');
+                }
             } catch (err) {
                 showError('复制失败，请手动复制API Key');
             }
