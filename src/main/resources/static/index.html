@@ -13,6 +13,17 @@
             overflow-x: hidden;
             width: 100vw;
         }
+
+        /* 防止模态框打开时页面抖动 */
+        body.modal-open {
+            /*
+            overflow-y: scroll;
+            padding-right: 0 !important;*/
+            /*comment by tony: Bootstrap 打开模态框时会自动隐藏页面滚动条,下面2行是为了禁用此行为*/
+            overflow: auto !important;
+            padding-right: 0 !important;
+        }
+
         .container-fluid {
             max-width: 100vw;
             padding-right: 0 !important;
@@ -152,7 +163,7 @@
             <div class="sidebar bg-light p-3">
                 <h4 class="mb-4 d-flex align-items-center gap-2">
                     <img src="/favicon.png" alt="Hostify" width="24" height="24" style="border-radius:6px;">
-                    Hostify 管理
+                    Hostify 管理面板
                 </h4>
                 
                 <button class="btn btn-primary w-100 mb-2" onclick="showCreateConfigModal()">
@@ -577,7 +588,7 @@
                         <i class="bi bi-info-circle me-1"></i>
                         每行一条记录：<code>IP 域名 # 注释</code>（注释可省略）&nbsp;·&nbsp;
                         以 <code>#&nbsp;IP&nbsp;域名</code> 开头表示禁用条目&nbsp;·&nbsp;
-                        纯注释行（<code>#&nbsp;文字</code>）和空行将被忽略&nbsp;·&nbsp;
+                        纯注释行（<code>#&nbsp;文字</code>）和空行将被<strong>保留</strong>&nbsp;·&nbsp;
                         保存后将<strong>全量替换</strong>当前所有条目
                     </div>
                     <textarea id="textEditorContent"
@@ -796,22 +807,25 @@
         function renderEntries(entries) {
             const container = document.getElementById('entriesContainer');
             const count = document.getElementById('entryCount');
-            count.textContent = entries.length;
-            
-            if (entries.length === 0) {
+
+            // 只显示 NORMAL 类型条目
+            const normalEntries = entries.filter(e => !e.entryType || e.entryType === 'NORMAL');
+            count.textContent = normalEntries.length;
+
+            if (normalEntries.length === 0) {
                 container.innerHTML = '<div class="text-center text-muted py-3">暂无条目</div>';
                 return;
             }
-            
+
             // 按排序顺序排序
-            entries.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
-            
+            normalEntries.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
             container.innerHTML = '';
-            entries.forEach(entry => {
-                const domains = entry.domains.split(' ').map(domain => 
+            normalEntries.forEach(entry => {
+                const domains = (entry.domains || '').split(' ').map(domain =>
                     `<span class="domain-badge badge bg-secondary">${domain}</span>`
                 ).join('');
-                
+
                 const row = document.createElement('div');
                 row.className = 'entry-row';
                 row.innerHTML = `
@@ -822,8 +836,8 @@
                             ${entry.comment ? `<small class="text-muted">${entry.comment}</small>` : ''}
                         </div>
                         <div class="d-flex gap-2">
-                            <span onclick="toggleEntryEnabled(${entry.id}, ${!entry.enabled})" 
-                                  title="${entry.enabled ? '点击禁用' : '点击启用'}" 
+                            <span onclick="toggleEntryEnabled(${entry.id}, ${!entry.enabled})"
+                                  title="${entry.enabled ? '点击禁用' : '点击启用'}"
                                   style="cursor: pointer;">
                                 <i class="bi ${entry.enabled ? 'bi-toggle-on text-success' : 'bi-toggle-off text-secondary'}" style="font-size: 1.2rem;"></i>
                             </span>
@@ -1614,6 +1628,10 @@
                 .slice()
                 .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
                 .map(entry => {
+                    const entryType = entry.entryType || 'NORMAL';
+                    if (entryType === 'BLANK') return '';
+                    if (entryType === 'COMMENT') return '# ' + (entry.comment || '');
+                    // NORMAL
                     let line = entry.ipAddress + ' ' + entry.domains;
                     if (entry.comment) line += ' # ' + entry.comment;
                     if (!entry.enabled) line = '# ' + line;
@@ -1639,8 +1657,23 @@
 
         function updateTextEditorLineCount() {
             const textarea = document.getElementById('textEditorContent');
-            const lines = textarea.value.split('\n').filter(l => l.trim() && !l.trim().startsWith('#') || (l.trim().startsWith('#') && /^#\s*[\d:]/.test(l.trim())));
-            document.getElementById('textEditorLineCount').textContent = `共 ${lines.length} 条有效条目`;
+            const lines = textarea.value.split('\n');
+            let normalCount = 0;
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue; // BLANK
+                if (trimmed.startsWith('#')) {
+                    // Check if it's a disabled NORMAL entry: # IP domains
+                    const afterHash = trimmed.substring(1).trim();
+                    const parts = afterHash.split(/\s+/);
+                    if (parts.length >= 2 && isValidIpAddress(parts[0])) normalCount++;
+                    // else COMMENT, skip
+                } else {
+                    const parts = trimmed.split(/\s+/);
+                    if (parts.length >= 2 && isValidIpAddress(parts[0])) normalCount++;
+                }
+            }
+            document.getElementById('textEditorLineCount').textContent = `共 ${normalCount} 条有效条目`;
         }
 
         // 保存文本编辑器内容
@@ -1775,79 +1808,69 @@
         }
 
         // 解析 Hosts 文件内容
+        // 空行 → BLANK；# 非IP → COMMENT；# IP 域名 → disabled NORMAL；IP 域名 → enabled NORMAL
         function parseHostsContent(content) {
             const lines = content.split('\n');
             const entries = [];
-            let lineNumber = 0;
-            let lastComment = ''; // 用于存储上一行的注释
-            
+
             for (const line of lines) {
-                lineNumber++;
-                const originalLine = line.trim();
-                
-                // 跳过空行
-                if (!originalLine) {
-                    lastComment = ''; // 空行清空上一行注释
+                const trimmed = line.trim();
+
+                // 空行 → BLANK
+                if (!trimmed) {
+                    entries.push({ entryType: 'BLANK', sortOrder: entries.length + 1 });
                     continue;
                 }
-                
-                // 提取行末注释（#后面的内容）
-                let comment = '';
-                let processedLine = originalLine;
-                const commentIndex = originalLine.indexOf('#');
-                if (commentIndex !== -1) {
-                    // 检查#是否在引号内（简化处理，假设注释不会包含#）
-                    const beforeComment = originalLine.substring(0, commentIndex).trim();
-                    if (beforeComment) {
-                        // 有实际内容，提取注释
-                        comment = originalLine.substring(commentIndex + 1).trim();
-                        processedLine = beforeComment;
-                    } else {
-                        // 整行都是注释，存储为上一行注释，但不创建条目
-                        lastComment = originalLine.substring(commentIndex + 1).trim();
-                        continue;
+
+                // 以 # 开头
+                if (trimmed.startsWith('#')) {
+                    const afterHash = trimmed.substring(1).trim();
+                    const parts = afterHash.split(/\s+/);
+
+                    // # + 有效IP + 域名 → disabled NORMAL
+                    if (parts.length >= 2 && isValidIpAddress(parts[0])) {
+                        const ip = parts[0];
+                        let rest = afterHash.substring(parts[0].length).trim();
+                        let comment = null;
+                        const hashIdx = rest.indexOf('#');
+                        if (hashIdx !== -1) {
+                            const raw = rest.substring(hashIdx + 1).trim();
+                            comment = raw || null;
+                            rest = rest.substring(0, hashIdx).trim();
+                        }
+                        const domains = rest.trim();
+                        if (domains) {
+                            entries.push({ entryType: 'NORMAL', ipAddress: ip, domains: domains, comment: comment, enabled: false, sortOrder: entries.length + 1 });
+                            continue;
+                        }
                     }
-                }
-                
-                // 跳过纯注释行
-                if (!processedLine) {
+
+                    // 其他 # 行 → COMMENT
+                    entries.push({ entryType: 'COMMENT', comment: afterHash || null, sortOrder: entries.length + 1 });
                     continue;
                 }
-                
-                // 分割IP和域名
+
+                // 普通行 → enabled NORMAL
+                let processedLine = trimmed;
+                let comment = null;
+                const hashIdx = processedLine.indexOf('#');
+                if (hashIdx !== -1) {
+                    const raw = processedLine.substring(hashIdx + 1).trim();
+                    comment = raw || null;
+                    processedLine = processedLine.substring(0, hashIdx).trim();
+                }
+
                 const parts = processedLine.split(/\s+/);
-                if (parts.length < 2) {
-                    // 如果是纯注释行（没有IP和域名），更新lastComment
-                    if (originalLine.startsWith('#')) {
-                        lastComment = originalLine.substring(1).trim();
-                    }
-                    continue; // 无效行
-                }
-                
+                if (parts.length < 2) continue;
+
                 const ipAddress = parts[0];
                 const domains = parts.slice(1).join(' ');
-                
-                // 验证IP地址格式（简单验证）
-                if (!isValidIpAddress(ipAddress)) {
-                    continue;
-                }
-                
-                // 如果没有行尾注释，使用上一行的注释（如果存在）
-                if (!comment && lastComment) {
-                    comment = lastComment;
-                }
-                
-                // 重置上一行注释，因为当前行已经处理了
-                lastComment = '';
-                
-                entries.push({
-                    ipAddress: ipAddress,
-                    domains: domains,
-                    comment: comment,
-                    sortOrder: entries.length + 1
-                });
+
+                if (!isValidIpAddress(ipAddress)) continue;
+
+                entries.push({ entryType: 'NORMAL', ipAddress: ipAddress, domains: domains, comment: comment, enabled: true, sortOrder: entries.length + 1 });
             }
-            
+
             return entries;
         }
 
@@ -1914,21 +1937,27 @@
             const previewContent = document.getElementById('previewContent');
             const previewCount = document.getElementById('previewCount');
             const importPreview = document.getElementById('importPreview');
-            
+
             let html = '';
             for (let i = 0; i < Math.min(entries.length, 20); i++) {
                 const entry = entries[i];
-                html += `${entry.ipAddress} ${entry.domains}`;
-                if (entry.comment) {
-                    html += ` # ${entry.comment}`;
+                const et = entry.entryType || 'NORMAL';
+                if (et === 'BLANK') {
+                    html += '\n';
+                } else if (et === 'COMMENT') {
+                    html += `# ${entry.comment || ''}\n`;
+                } else {
+                    html += `${entry.ipAddress} ${entry.domains}`;
+                    if (entry.comment) html += ` # ${entry.comment}`;
+                    if (!entry.enabled) html = '# ' + html;
+                    html += '\n';
                 }
-                html += '\n';
             }
-            
+
             if (entries.length > 20) {
                 html += `\n... 还有 ${entries.length - 20} 条`;
             }
-            
+
             previewContent.textContent = html;
             previewCount.textContent = entries.length;
             importPreview.classList.remove('d-none');
@@ -1936,26 +1965,35 @@
 
         // 处理冲突并导入条目
         async function processAndImportEntries(newEntries, conflictAction) {
-            // 收集现有域名映射
+            // 收集现有域名映射（仅 NORMAL 条目）
             const existingDomains = new Map();
             if (currentConfig.entries) {
                 currentConfig.entries.forEach(entry => {
-                    const entryDomains = entry.domains.split(/\s+/).filter(d => d.trim() !== '');
-                    entryDomains.forEach(domain => {
-                        existingDomains.set(domain, entry.id);
-                    });
+                    if (!entry.entryType || entry.entryType === 'NORMAL') {
+                        const entryDomains = (entry.domains || '').split(/\s+/).filter(d => d.trim() !== '');
+                        entryDomains.forEach(domain => {
+                            existingDomains.set(domain, entry.id);
+                        });
+                    }
                 });
             }
-            
+
             // 检查冲突并处理
             const entriesToImport = [];
-            const conflicts = [];
-            
+
             for (const newEntry of newEntries) {
-                const newDomains = newEntry.domains.split(/\s+/).filter(d => d.trim() !== '');
+                const et = newEntry.entryType || 'NORMAL';
+
+                // COMMENT / BLANK 直接加入，不做冲突检测
+                if (et !== 'NORMAL') {
+                    entriesToImport.push({...newEntry, overwrite: false});
+                    continue;
+                }
+
+                const newDomains = (newEntry.domains || '').split(/\s+/).filter(d => d.trim() !== '');
                 let hasConflict = false;
                 let conflictingDomains = [];
-                
+
                 // 检查每个新域名是否冲突
                 for (const domain of newDomains) {
                     if (existingDomains.has(domain)) {
@@ -1963,7 +2001,7 @@
                         conflictingDomains.push(domain);
                     }
                 }
-                
+
                 if (hasConflict) {
                     if (conflictAction === 'abort') {
                         // 终止导入
@@ -1973,7 +2011,6 @@
                         continue;
                     } else if (conflictAction === 'overwrite') {
                         // 覆盖：需要删除现有条目，然后添加新条目
-                        // 这里我们标记需要覆盖的条目
                         entriesToImport.push({...newEntry, overwrite: true, conflictingDomains});
                     }
                 } else {
@@ -1981,12 +2018,12 @@
                     entriesToImport.push({...newEntry, overwrite: false});
                 }
             }
-            
+
             // 执行导入
             if (entriesToImport.length === 0) {
                 throw new Error('没有可导入的条目');
             }
-            
+
             // 发送批量导入请求
             const response = await fetch(`/api/hosts/${currentConfig.id}/batch-import`, {
                 method: 'POST',
@@ -1998,7 +2035,7 @@
                     conflictAction: conflictAction
                 })
             });
-            
+
             if (!response.ok) {
                 const errorText = await response.text();
                 throw new Error(errorText || '批量导入失败');

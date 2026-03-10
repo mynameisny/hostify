@@ -4,6 +4,7 @@ package me.ningyu.app.hostify.facade.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import me.ningyu.app.hostify.dto.BatchImportEntry;
+import me.ningyu.app.hostify.entity.EntryType;
 import me.ningyu.app.hostify.entity.HostsConfig;
 import me.ningyu.app.hostify.entity.HostsEntry;
 import me.ningyu.app.hostify.exception.BusinessException;
@@ -207,8 +208,8 @@ public class HostsService
     @Transactional
     public HostsEntry addEntry(Long configId, String ipAddress, String domains, String comment, Integer sortOrder)
     {
-        // 字段校验
-        validateEntryFields(ipAddress, domains, comment, sortOrder);
+        // 字段校验（添加条目始终为 NORMAL 类型）
+        validateEntryFields(EntryType.NORMAL, ipAddress, domains, comment, sortOrder);
 
         HostsConfig config = hostsConfigRepository.findById(configId).orElseThrow(() -> new BusinessException("配置不存在"));
 
@@ -267,8 +268,8 @@ public class HostsService
             throw new BusinessException("条目ID不能为空");
         }
 
-        // 字段校验
-        validateEntryFields(ipAddress, domains, comment, sortOrder);
+        // 字段校验（更新条目始终为 NORMAL 类型）
+        validateEntryFields(EntryType.NORMAL, ipAddress, domains, comment, sortOrder);
 
         // 找到条目及其所属配置
         HostsConfig config = hostsConfigRepository.findAll().stream()
@@ -339,8 +340,8 @@ public class HostsService
                 .findFirst()
                 .orElseThrow(() -> new BusinessException("条目不存在"));
 
-        // 如果条目已启用且所属配置也启用，则不允许删除
-        if (Boolean.TRUE.equals(entry.getEnabled()) && Boolean.TRUE.equals(config.getEnabled()))
+        // COMMENT / BLANK 条目可以直接删除；NORMAL 条目启用时不允许删除
+        if (entry.getEntryType() == EntryType.NORMAL && Boolean.TRUE.equals(entry.getEnabled()) && Boolean.TRUE.equals(config.getEnabled()))
         {
             throw new BusinessException("不能删除已启用的条目，请先禁用条目或配置");
         }
@@ -370,6 +371,11 @@ public class HostsService
                 .filter(e -> e.getId().equals(entryId))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException("条目不存在"));
+
+        if (entry.getEntryType() != EntryType.NORMAL)
+        {
+            throw new BusinessException("注释行和空行不支持启用/禁用操作");
+        }
 
         entry.setEnabled(enabled != null ? enabled : !entry.getEnabled());
         hostsConfigRepository.save(config);
@@ -412,29 +418,32 @@ public class HostsService
     }
 
     /**
-     * 校验条目字段
+     * 校验条目字段（NORMAL 类型才校验 IP / 域名）
      */
-    private void validateEntryFields(String ipAddress, String domains, String comment, Integer sortOrder)
+    private void validateEntryFields(EntryType entryType, String ipAddress, String domains, String comment, Integer sortOrder)
     {
-        if (!StringUtils.hasText(ipAddress))
+        if (entryType == EntryType.NORMAL)
         {
-            throw new BusinessException("IP地址不能为空");
-        }
-        if (isInValidIpAddress(ipAddress))
-        {
-            throw new BusinessException("IP地址格式不正确: " + ipAddress);
-        }
-        if (!StringUtils.hasText(domains))
-        {
-            throw new BusinessException("域名列表不能为空");
-        }
-        if (domains.length() > 2000)
-        {
-            throw new BusinessException("域名列表长度不能超过2000个字符");
-        }
-        if (!isValidDomains(domains))
-        {
-            throw new BusinessException("域名格式不正确");
+            if (!StringUtils.hasText(ipAddress))
+            {
+                throw new BusinessException("IP地址不能为空");
+            }
+            if (isInValidIpAddress(ipAddress))
+            {
+                throw new BusinessException("IP地址格式不正确: " + ipAddress);
+            }
+            if (!StringUtils.hasText(domains))
+            {
+                throw new BusinessException("域名列表不能为空");
+            }
+            if (domains.length() > 2000)
+            {
+                throw new BusinessException("域名列表长度不能超过2000个字符");
+            }
+            if (!isValidDomains(domains))
+            {
+                throw new BusinessException("域名格式不正确");
+            }
         }
         if (comment != null && comment.length() > 500)
         {
@@ -511,40 +520,74 @@ public class HostsService
 
     /**
      * 解析 hosts 格式文本为条目列表
-     * 启用条目：  192.168.1.1 example.com # comment
-     * 禁用条目：# 192.168.1.1 example.com # comment
+     * 空行         → BLANK 条目
+     * # 非IP文字   → COMMENT 条目
+     * # IP 域名    → disabled NORMAL 条目
+     * IP 域名      → enabled NORMAL 条目
      */
     private List<HostsEntry> parseHostsText(String text)
     {
         List<HostsEntry> entries = new java.util.ArrayList<>();
-        String[] lines = text.split("\n");
+        String[] lines = text.split("\n", -1);
 
         for (String line : lines)
         {
             String trimmed = line.trim();
+
+            // 空行 → BLANK
             if (!StringUtils.hasText(trimmed))
             {
+                HostsEntry entry = new HostsEntry();
+                entry.setEntryType(EntryType.BLANK);
+                entry.setEnabled(true);
+                entries.add(entry);
                 continue;
             }
 
-            boolean enabled = true;
-            String processedLine = trimmed;
-
+            // 以 # 开头
             if (trimmed.startsWith("#"))
             {
                 String afterHash = trimmed.substring(1).trim();
                 String[] parts = afterHash.split("\\s+");
+
+                // # + 有效IP → disabled NORMAL
                 if (parts.length >= 2 && !isInValidIpAddress(parts[0]))
                 {
-                    enabled = false;
-                    processedLine = afterHash;
+                    String ip = parts[0];
+                    String commentInLine = null;
+                    String rest = afterHash.substring(parts[0].length()).trim();
+                    int hashIdx = rest.indexOf('#');
+                    if (hashIdx != -1)
+                    {
+                        String raw = rest.substring(hashIdx + 1).trim();
+                        commentInLine = raw.isEmpty() ? null : raw;
+                        rest = rest.substring(0, hashIdx).trim();
+                    }
+                    String domains = rest.trim();
+                    if (!domains.isEmpty() && !isInValidIpAddress(ip) && isValidDomains(domains))
+                    {
+                        HostsEntry entry = new HostsEntry();
+                        entry.setEntryType(EntryType.NORMAL);
+                        entry.setIpAddress(ip);
+                        entry.setDomains(domains);
+                        entry.setComment(commentInLine);
+                        entry.setEnabled(false);
+                        entries.add(entry);
+                        continue;
+                    }
                 }
-                else
-                {
-                    continue;
-                }
+
+                // 其他 # 行 → COMMENT
+                HostsEntry entry = new HostsEntry();
+                entry.setEntryType(EntryType.COMMENT);
+                entry.setComment(afterHash.isEmpty() ? null : afterHash);
+                entry.setEnabled(true);
+                entries.add(entry);
+                continue;
             }
 
+            // 普通行 → enabled NORMAL
+            String processedLine = trimmed;
             String comment = null;
             int hashIdx = processedLine.indexOf('#');
             if (hashIdx != -1)
@@ -569,10 +612,11 @@ public class HostsService
             }
 
             HostsEntry entry = new HostsEntry();
+            entry.setEntryType(EntryType.NORMAL);
             entry.setIpAddress(ip);
             entry.setDomains(domains);
             entry.setComment(comment);
-            entry.setEnabled(enabled);
+            entry.setEnabled(true);
             entries.add(entry);
         }
 
@@ -654,6 +698,21 @@ public class HostsService
 
         for (me.ningyu.app.hostify.dto.BatchImportEntry importEntry : entries)
         {
+            EntryType entryType = importEntry.getEntryType() != null ? importEntry.getEntryType() : EntryType.NORMAL;
+
+            // COMMENT / BLANK 条目直接创建，无需冲突检测
+            if (entryType != EntryType.NORMAL)
+            {
+                HostsEntry newEntry = new HostsEntry();
+                newEntry.setEntryType(entryType);
+                newEntry.setComment(importEntry.getComment());
+                newEntry.setSortOrder(importEntry.getSortOrder() != null ? importEntry.getSortOrder() : config.getEntries().size() + entriesToSave.size() + 1);
+                newEntry.setEnabled(true);
+                newEntry.setHostsConfig(config);
+                entriesToSave.add(newEntry);
+                continue;
+            }
+
             // 验证IP地址
             if (isInValidIpAddress(importEntry.getIpAddress()))
             {
@@ -705,8 +764,9 @@ public class HostsService
                 }
             }
 
-            // 创建新条目
+            // 创建新 NORMAL 条目
             HostsEntry newEntry = new HostsEntry();
+            newEntry.setEntryType(EntryType.NORMAL);
             newEntry.setIpAddress(importEntry.getIpAddress());
             newEntry.setDomains(importEntry.getDomains());
             newEntry.setComment(importEntry.getComment());

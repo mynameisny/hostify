@@ -1,10 +1,10 @@
 package me.ningyu.app.hostify.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 import lombok.experimental.Accessors;
+import me.ningyu.app.hostify.entity.EntryType;
 
 import java.util.List;
 
@@ -18,11 +18,12 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class BatchImportEntry
 {
-    @NotBlank(message = "IP地址不能为空")
+    /** 条目类型，默认 NORMAL；COMMENT / BLANK 时忽略 ipAddress / domains */
+    private EntryType entryType = EntryType.NORMAL;
+
     @Size(max = 45, message = "IP地址长度不能超过45个字符")
     private String ipAddress;
 
-    @NotBlank(message = "域名列表不能为空")
     @Size(max = 2000, message = "域名列表长度不能超过2000个字符")
     private String domains;
 
@@ -30,8 +31,8 @@ public class BatchImportEntry
     private String comment;
 
     private Integer sortOrder;
-    
+
     private Boolean overwrite;
-    
+
     private List<String> conflictingDomains;
 }
