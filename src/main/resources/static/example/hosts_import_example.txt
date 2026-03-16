@@ -1,0 +1,16 @@
+# Hostify 批量导入示例 - Hosts 文件格式
+
+# 本地开发环境
+127.0.0.1 localhost local.test
+
+# 测试服务器
+192.168.1.100 dev.example.com staging.example.com
+
+# IPv6本地回环
+::1 ipv6-localhost
+
+# 内部服务集群
+10.0.0.50 api.internal db.internal cache.internal
+
+# 公共DNS服务
+8.8.8.8 dns.google
