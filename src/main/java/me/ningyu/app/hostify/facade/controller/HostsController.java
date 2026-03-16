@@ -70,10 +70,6 @@ public class HostsController
     }
 
     /**
-     * 获取 hosts 文件内容（供 SwitchHosts 使用）
-     * URL 示例：/api/hosts/raw/{configKey}
-     */
-    /**
      * 获取指定配置的原始 Hosts 内容（用于 SwitchHosts 等工具集成）
      * 支持通过 API Key 进行认证（无需登录）
      * URL 示例：/api/hosts/raw/{configKey}?apiKey=your-api-key

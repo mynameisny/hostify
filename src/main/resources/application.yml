@@ -12,3 +12,10 @@ spring:
   banner:
     location: classpath:banner/hostify.txt
     charset: UTF-8
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+      force-request: true
+      force-response: true
