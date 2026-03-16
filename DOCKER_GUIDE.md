@@ -129,3 +129,16 @@ docker run -d -p 8080:8080 -e ADMIN_PASSWORD=your_password -v hostify-data:/app/
 - **H2 Console**（`/h2-console`）仅在 `DATABASE_PROFILE=h2` 时可用，生产环境建议使用 MySQL
 - 默认管理员密码为 `admin`，首次部署后请立即通过 `ADMIN_PASSWORD` 环境变量修改
 - H2 数据文件存储于容器内 `/app/data`，**务必挂载 volume**，否则容器删除后数据丢失
+
+## 故障排除
+
+详细故障排除指南请参考 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)。
+
+### SwitchHosts SSL 证书错误
+
+如果 SwitchHosts 客户端连接 Docker 部署的 Hostify 服务时出现 **"unable to verify the first certificate"** 错误，请参考 [故障排除文档](TROUBLESHOOTING.md#1-switchhosts-客户端-ssl-证书错误) 中的详细解决方案。
+
+常见解决方法：
+1. **临时绕过验证**：`NODE_TLS_REJECT_UNAUTHORIZED=0 open /Applications/SwitchHosts.app`
+2. **使用 HTTP**：如果 Docker 容器暴露 HTTP 端口（非 HTTPS）
+3. **配置有效证书**：为生产环境部署配置 SSL 证书

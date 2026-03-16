@@ -315,3 +315,73 @@ docker run -d -p 8080:8080 \
   --name hostify hostify
 ```
 
+---
+
+## 故障排除
+
+详细故障排除指南请参考 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)。
+
+### SwitchHosts 客户端 SSL 证书错误
+
+当 SwitchHosts 客户端连接使用 HTTPS 的 Hostify 服务时，如果出现 **"unable to verify the first certificate"** 错误，这是因为你的远程 Hosts 服务（如 `https://hostify.dcloud.cnpc.cn/...`）使用了自签名证书或证书链不完整，而 SwitchHosts（基于 Electron/Node.js）默认会严格验证 SSL 证书。
+
+#### 🛠️ 解决方案（按推荐程度排序）
+
+##### ✅ 方案一：临时绕过证书验证（开发环境推荐）
+
+在终端中设置环境变量后启动 SwitchHosts：
+
+```bash
+# 临时设置（当前终端会话有效）
+export NODE_TLS_REJECT_UNAUTHORIZED=0
+open /Applications/SwitchHosts.app
+
+# 或者一行命令
+NODE_TLS_REJECT_UNAUTHORIZED=0 open /Applications/SwitchHosts.app
+```
+
+⚠️ **注意**：`NODE_TLS_REJECT_UNAUTHORIZED=0` 会禁用所有 TLS 证书验证，存在中间人攻击风险，仅建议在可信网络环境下临时使用。
+
+##### ✅ 方案二：使用 HTTP（仅限内网/测试环境）
+
+如果远程服务支持，临时改用 `http://` 协议访问：
+
+```bash
+# 将 SwitchHosts 中的远程地址从 https:// 改为 http://
+http://hostify.dcloud.cnpc.cn/api/hosts/raw/dev?apiKey=your_api_key
+```
+
+⚠️ **仅限内网或完全可信环境**，避免敏感信息泄露。
+
+##### ✅ 方案三：配置系统信任证书（生产环境推荐）
+
+1. **获取服务器证书**：
+   ```bash
+   openssl s_client -connect hostify.dcloud.cnpc.cn:443 -showcerts </dev/null 2>/dev/null | openssl x509 -outform PEM > hostify_cert.pem
+   ```
+
+2. **将证书添加到系统信任库**（macOS）：
+   ```bash
+   sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain hostify_cert.pem
+   ```
+
+3. **重启 SwitchHosts**。
+
+##### ✅ 方案四：使用 SwitchHosts 的代理功能
+
+如果 SwitchHosts 支持代理设置，可以配置通过代理访问，某些代理工具（如 Charles、Fiddler）可以处理 SSL 证书问题。
+
+#### 🔧 根本解决方案
+
+对于生产环境，建议为 Hostify 服务配置有效的 SSL 证书：
+
+1. **使用 Let's Encrypt 免费证书**（推荐）
+2. **购买商业 SSL 证书**
+3. **使用内部 CA 签发证书**，并将 CA 根证书部署到所有客户端
+
+#### 📝 相关链接
+
+- [SwitchHosts GitHub Issues](https://github.com/oldj/SwitchHosts/issues)
+- [Node.js TLS 文档](https://nodejs.org/api/tls.html)
+- [Let's Encrypt](https://letsencrypt.org/)
+
